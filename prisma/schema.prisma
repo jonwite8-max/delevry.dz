@@ -5,17 +5,75 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
-enum UserStatus { ACTIVE INACTIVE SUSPENDED }
-enum UserRole { SUPER_ADMIN ADMIN STAFF USER }
-enum ShipmentStatus { NEW PROCESSING RECEIVED IN_TRANSIT ARRIVED READY_FOR_PICKUP DELIVERED CANCELLED RETURNED ISSUE }
-enum FinancialStatus { UNPAID PARTIALLY_PAID PAID REFUNDED REVERSED SETTLED }
-enum CustomerType { TEMPORARY REGISTERED }
-enum CustomerLifecycle { NEW ACTIVE REPEAT INACTIVE }
-enum MerchantVerificationStatus { UNVERIFIED PENDING VERIFIED REJECTED }
-enum AuditAction { CREATE UPDATE CANCEL REVERSE LOGIN LOGOUT PERMISSION_CHANGE VERIFY MERGE ARCHIVE }
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  STAFF
+  USER
+}
+
+enum ShipmentStatus {
+  NEW
+  PROCESSING
+  RECEIVED
+  IN_TRANSIT
+  ARRIVED
+  READY_FOR_PICKUP
+  DELIVERED
+  CANCELLED
+  RETURNED
+  ISSUE
+}
+
+enum FinancialStatus {
+  UNPAID
+  PARTIALLY_PAID
+  PAID
+  REFUNDED
+  REVERSED
+  SETTLED
+}
+
+enum CustomerType {
+  TEMPORARY
+  REGISTERED
+}
+
+enum CustomerLifecycle {
+  NEW
+  ACTIVE
+  REPEAT
+  INACTIVE
+}
+
+enum MerchantVerificationStatus {
+  UNVERIFIED
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  CANCEL
+  REVERSE
+  LOGIN
+  LOGOUT
+  PERMISSION_CHANGE
+  VERIFY
+  MERGE
+  ARCHIVE
+}
+
 
 model User {
   id String @id @default(cuid())
