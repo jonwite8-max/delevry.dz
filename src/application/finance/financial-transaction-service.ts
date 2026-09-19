@@ -1,7 +1,19 @@
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@/generated/prisma/client";
 import { recordAudit } from "@/application/audit/audit-service";
-import { paymentMethods, paymentStatuses, paymentTypes, ledgerDirections, financialStatusFor, debtStatusFor, debtStatuses, validateCollectionAgainstDue, moneyFromDatabase, moneyToNumber, moneyToString } from "@/domain/finance/financial-engine";
+import {
+  paymentMethods,
+  paymentStatuses,
+  paymentTypes,
+  ledgerDirections,
+  financialStatusFor,
+  debtStatusFor,
+  debtStatuses,
+  validateCollectionAgainstDue,
+  moneyFromDatabase,
+  moneyToNumber,
+  moneyToString,
+} from "@/domain/finance/financial-engine";
 
 type Tx = Prisma.TransactionClient;
 
@@ -16,7 +28,7 @@ export type CollectionPaymentInput = {
 };
 
 export async function syncShipmentFinancialState(tx: Tx, shipmentId: string) {
-  await tx.$queryRaw<{ id: string }[]>`SELECT id FROM "Shipment" WHERE id = ${shipmentId} FOR UPDATE`;
+  await tx.$queryRaw<{ id: string }[]>\`SELECT id FROM "Shipment" WHERE id = \${shipmentId} FOR UPDATE\`;
 
   const shipment = await tx.shipment.findUnique({
     where: { id: shipmentId },
@@ -50,7 +62,7 @@ export async function syncShipmentFinancialState(tx: Tx, shipmentId: string) {
 
   let debtAfter = debtBefore;
 
-  if (shipment.customerId && collected < due) {
+  if (shipment.customerId && collectedMinor < dueMinor) {
     debtAfter = await tx.debt.upsert({
       where: { shipmentId: shipment.id },
       update: {
@@ -67,11 +79,13 @@ export async function syncShipmentFinancialState(tx: Tx, shipmentId: string) {
       },
     });
   } else {
+    const settledMinor = collectedMinor < dueMinor ? collectedMinor : dueMinor;
+    const settledStatus = debtStatusFor(shipment.deliveryFee.toString(), moneyToString(settledMinor));
     await tx.debt.updateMany({
       where: { shipmentId: shipment.id },
       data: {
-        settledAmount: moneyToString(collectedMinor < dueMinor ? collectedMinor : dueMinor),
-        status: debtStatusFor(shipment.deliveryFee.toString(), collectedMinor < dueMinor ? aggregate._sum.amount?.toString() ?? "0" : shipment.deliveryFee.toString()),
+        settledAmount: moneyToString(settledMinor),
+        status: settledStatus,
       },
     });
     debtAfter = await tx.debt.findUnique({ where: { shipmentId } });
@@ -97,7 +111,7 @@ export async function createCollectionPayment(tx: Tx, input: CollectionPaymentIn
   const customerId = input.customerId ?? shipment?.customerId;
 
   if (shipment) {
-    await tx.$queryRaw<{ id: string }[]>`SELECT id FROM "Shipment" WHERE id = ${shipment.id} FOR UPDATE`;
+    await tx.$queryRaw<{ id: string }[]>\`SELECT id FROM "Shipment" WHERE id = \${shipment.id} FOR UPDATE\`;
     const shipmentDue = await tx.shipment.findUniqueOrThrow({
       where: { id: shipment.id },
       select: { deliveryFee: true },
@@ -110,11 +124,16 @@ export async function createCollectionPayment(tx: Tx, input: CollectionPaymentIn
       },
       _sum: { amount: true },
     });
-    validateCollectionAgainstDue(shipmentDue.deliveryFee.toString(), aggregate._sum.amount?.toString() ?? "0", moneyToString(amountMinor));
+    validateCollectionAgainstDue(
+      shipmentDue.deliveryFee.toString(),
+      aggregate._sum.amount?.toString() ?? "0",
+      moneyToString(amountMinor),
+    );
   }
+
   const payment = await tx.payment.create({
     data: {
-      reference: `PAY-${randomUUID()}`,
+      reference: `PAY-\${randomUUID()}\`,
       shipmentId: input.shipmentId,
       customerId,
       amount: moneyToString(amountMinor),
@@ -143,9 +162,7 @@ export async function createCollectionPayment(tx: Tx, input: CollectionPaymentIn
     },
   });
 
-  const financial = shipment
-    ? await syncShipmentFinancialState(tx, shipment.id)
-    : null;
+  const financial = shipment ? await syncShipmentFinancialState(tx, shipment.id) : null;
 
   return { payment, financial };
 }
@@ -153,7 +170,7 @@ export async function createCollectionPayment(tx: Tx, input: CollectionPaymentIn
 export async function reverseShipmentFinancials(tx: Tx, shipmentId: string, reason: string, actorUserId: string) {
   if (reason.trim().length < 3) throw new Error("REASON_REQUIRED");
 
-  await tx.$queryRaw<{ id: string }[]>`SELECT id FROM "Shipment" WHERE id = ${shipmentId} FOR UPDATE`;
+  await tx.$queryRaw<{ id: string }[]>\`SELECT id FROM "Shipment" WHERE id = \${shipmentId} FOR UPDATE\`;
   const shipment = await tx.shipment.findUnique({
     where: { id: shipmentId },
     select: { id: true, financialStatus: true },
