@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@/generated/prisma/client";
-import { paymentMethods, paymentStatuses, paymentTypes, ledgerDirections, financialStatusFor, debtStatusFor } from "@/domain/finance/financial-engine";
+import { paymentMethods, paymentStatuses, paymentTypes, ledgerDirections, financialStatusFor, debtStatusFor, validateCollectionAgainstDue } from "@/domain/finance/financial-engine";
 
 type Tx = Prisma.TransactionClient;
 
@@ -89,6 +89,22 @@ export async function createCollectionPayment(tx: Tx, input: CollectionPaymentIn
   if (input.shipmentId && !shipment) throw new Error("SHIPMENT_NOT_FOUND");
 
   const customerId = input.customerId ?? shipment?.customerId;
+
+  if (shipment) {
+    const due = Number((await tx.shipment.findUniqueOrThrow({
+      where: { id: shipment.id },
+      select: { deliveryFee: true },
+    })).deliveryFee);
+    const aggregate = await tx.payment.aggregate({
+      where: {
+        shipmentId: shipment.id,
+        status: paymentStatuses.VALID,
+        type: paymentTypes.COLLECTION,
+      },
+      _sum: { amount: true },
+    });
+    validateCollectionAgainstDue(due, Number(aggregate._sum.amount ?? 0), input.amount);
+  }
   const payment = await tx.payment.create({
     data: {
       reference: `PAY-${randomUUID()}`,
