@@ -1,17 +1,8 @@
-import { randomInt } from "node:crypto";
 import { prisma } from "@/infrastructure/db/prisma";
-import type { Prisma } from "@/generated/prisma/client";
 import { can, permissionActions } from "@/domain/auth/permission-engine";
-import {
-  debtStatusFor,
-  financialStatusFor,
-  ledgerDirections,
-  paymentMethods,
-  paymentStatuses,
-  paymentTypes,
-  remainingDebt,
-} from "@/domain/finance/financial-engine";
+import { paymentMethods, paymentStatuses, paymentTypes, ledgerDirections } from "@/domain/finance/financial-engine";
 import { recordAudit } from "@/application/audit/audit-service";
+import { createCollectionPayment, syncShipmentFinancialState } from "@/application/finance/financial-transaction-service";
 
 type PaymentInput = {
   shipmentId?: string;
@@ -22,106 +13,46 @@ type PaymentInput = {
   reason?: string;
 };
 
-async function uniquePaymentReference(tx: Prisma.TransactionClient) {
-  for (let i = 0; i < 10; i += 1) {
-    const reference = `PAY-${Date.now()}-${randomInt(1000, 10000)}`;
-    const exists = await tx.payment.findUnique({ where: { reference }, select: { id: true } });
-    if (!exists) return reference;
-  }
-  throw new Error("PAYMENT_REFERENCE_FAILED");
-}
-
 export async function recordPayment(role: string, userId: string, input: PaymentInput) {
   if (!can(role, permissionActions.financePaymentCreate)) throw new Error("FORBIDDEN");
-  if (!Number.isFinite(input.amount) || input.amount <= 0) throw new Error("INVALID_AMOUNT");
-  if (!Object.values(paymentMethods).includes(input.method as never)) throw new Error("INVALID_METHOD");
   const type = input.type ?? paymentTypes.COLLECTION;
   if (type !== paymentTypes.COLLECTION) throw new Error("INVALID_PAYMENT_TYPE");
 
   return prisma.$transaction(async (tx) => {
-    if (!input.shipmentId && !input.customerId) throw new Error("PAYMENT_TARGET_REQUIRED");
-
-    const shipment = input.shipmentId
-      ? await tx.shipment.findUnique({
-          where: { id: input.shipmentId },
-          select: { id: true, customerId: true, deliveryFee: true, financialStatus: true },
-        })
-      : null;
-    if (input.shipmentId && !shipment) throw new Error("SHIPMENT_NOT_FOUND");
-
-    const customerId = input.customerId ?? shipment?.customerId;
-    const reference = await uniquePaymentReference(tx);
-
-    const payment = await tx.payment.create({
-      data: {
-        reference,
-        shipmentId: input.shipmentId,
-        customerId,
-        amount: String(input.amount),
-        method: input.method,
-        type,
-        status: paymentStatuses.VALID,
-        createdByUserId: userId,
-      },
-    });
-
-    if (shipment) {
-      const aggregate = await tx.payment.aggregate({
-        where: { shipmentId: shipment.id, status: paymentStatuses.VALID, type: paymentTypes.COLLECTION },
-        _sum: { amount: true },
-      });
-      const collected = Number(aggregate._sum.amount ?? 0);
-      const due = Number(shipment.deliveryFee);
-      await tx.shipment.update({
-        where: { id: shipment.id },
-        data: { financialStatus: financialStatusFor(due, collected) },
-      });
-
-      if (collected < due && shipment.customerId) {
-        await tx.debt.upsert({
-          where: { shipmentId: shipment.id },
-          update: { settledAmount: String(collected), status: debtStatusFor(due, collected) },
-          create: {
-            customerId: shipment.customerId,
-            shipmentId: shipment.id,
-            originalAmount: String(due),
-            settledAmount: String(collected),
-            status: debtStatusFor(due, collected),
-          },
-        });
-      } else if (collected >= due) {
-        await tx.debt.updateMany({
-          where: { shipmentId: shipment.id },
-          data: { settledAmount: String(due), status: debtStatusFor(due, due) },
-        });
-      }
-    }
-
-    const cash = await tx.cashAccount.findUnique({ where: { id: "main-cash" }, select: { id: true } });
-    if (!cash) throw new Error("MAIN_CASH_NOT_FOUND");
-
-    await tx.cashLedgerEntry.create({
-      data: {
-        cashAccountId: cash.id,
-        type: "PAYMENT",
-        amount: String(input.amount),
-        direction: ledgerDirections.IN,
-        referenceType: "Payment",
-        referenceId: payment.id,
-        reason: input.reason?.trim() || undefined,
-      },
+    const result = await createCollectionPayment(tx, {
+      shipmentId: input.shipmentId,
+      customerId: input.customerId,
+      amount: input.amount,
+      method: input.method,
+      createdByUserId: userId,
+      reason: input.reason,
+      ledgerType: "PAYMENT",
     });
 
     await recordAudit({
       actorUserId: userId,
       action: "CREATE",
       entityType: "Payment",
-      entityId: payment.id,
-      afterData: payment,
+      entityId: result.payment.id,
+      afterData: result.payment,
       reason: input.reason,
     }, tx);
 
-    return payment;
+    if (result.financial?.debtBefore?.id !== result.financial?.debtAfter?.id ||
+        result.financial?.debtBefore?.settledAmount.toString() !== result.financial?.debtAfter?.settledAmount.toString() ||
+        result.financial?.debtBefore?.status !== result.financial?.debtAfter?.status) {
+      await recordAudit({
+        actorUserId: userId,
+        action: "UPDATE",
+        entityType: "Debt",
+        entityId: result.financial.debtAfter?.id ?? result.financial.debtBefore?.id ?? "",
+        beforeData: result.financial.debtBefore,
+        afterData: result.financial.debtAfter,
+        reason: input.reason,
+      }, tx);
+    }
+
+    return result.payment;
   });
 }
 
@@ -154,34 +85,9 @@ export async function reversePayment(role: string, userId: string, paymentId: st
       },
     });
 
+    let financial = null;
     if (payment.shipmentId) {
-      const shipment = await tx.shipment.findUnique({
-        where: { id: payment.shipmentId },
-        select: { id: true, deliveryFee: true },
-      });
-      if (shipment) {
-        const aggregate = await tx.payment.aggregate({
-          where: { shipmentId: shipment.id, status: paymentStatuses.VALID, type: paymentTypes.COLLECTION },
-          _sum: { amount: true },
-        });
-        const collected = Number(aggregate._sum.amount ?? 0);
-        const due = Number(shipment.deliveryFee);
-        await tx.shipment.update({
-          where: { id: shipment.id },
-          data: { financialStatus: financialStatusFor(due, collected) },
-        });
-        if (collected < due) {
-          await tx.debt.updateMany({
-            where: { shipmentId: shipment.id },
-            data: { settledAmount: String(collected), status: debtStatusFor(due, collected) },
-          });
-        } else {
-          await tx.debt.updateMany({
-            where: { shipmentId: shipment.id },
-            data: { settledAmount: String(due), status: debtStatusFor(due, due) },
-          });
-        }
-      }
+      financial = await syncShipmentFinancialState(tx, payment.shipmentId);
     }
 
     await recordAudit({
@@ -193,6 +99,20 @@ export async function reversePayment(role: string, userId: string, paymentId: st
       afterData: updated,
       reason: reason.trim(),
     }, tx);
+
+    if (financial?.debtBefore?.id !== financial?.debtAfter?.id ||
+        financial?.debtBefore?.settledAmount.toString() !== financial?.debtAfter?.settledAmount.toString() ||
+        financial?.debtBefore?.status !== financial?.debtAfter?.status) {
+      await recordAudit({
+        actorUserId: userId,
+        action: "UPDATE",
+        entityType: "Debt",
+        entityId: financial.debtAfter?.id ?? financial.debtBefore?.id ?? "",
+        beforeData: financial.debtBefore,
+        afterData: financial.debtAfter,
+        reason: reason.trim(),
+      }, tx);
+    }
 
     return updated;
   });
