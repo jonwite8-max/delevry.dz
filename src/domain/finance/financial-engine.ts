@@ -19,6 +19,7 @@ export const debtStatuses = {
   OPEN: "OPEN",
   PARTIALLY_SETTLED: "PARTIALLY_SETTLED",
   SETTLED: "SETTLED",
+  CANCELLED: "CANCELLED",
 } as const;
 
 export const ledgerDirections = {
