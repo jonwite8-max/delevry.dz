@@ -28,7 +28,7 @@ export type CollectionPaymentInput = {
 };
 
 export async function syncShipmentFinancialState(tx: Tx, shipmentId: string) {
-  await tx.$queryRaw<{ id: string }[]>\`SELECT id FROM "Shipment" WHERE id = \${shipmentId} FOR UPDATE\`;
+  await tx.$queryRaw<{ id: string }[]>`SELECT id FROM "Shipment" WHERE id = ${shipmentId} FOR UPDATE`;
 
   const shipment = await tx.shipment.findUnique({
     where: { id: shipmentId },
@@ -111,7 +111,7 @@ export async function createCollectionPayment(tx: Tx, input: CollectionPaymentIn
   const customerId = input.customerId ?? shipment?.customerId;
 
   if (shipment) {
-    await tx.$queryRaw<{ id: string }[]>\`SELECT id FROM "Shipment" WHERE id = \${shipment.id} FOR UPDATE\`;
+    await tx.$queryRaw<{ id: string }[]>`SELECT id FROM "Shipment" WHERE id = ${shipment.id} FOR UPDATE`;
     const shipmentDue = await tx.shipment.findUniqueOrThrow({
       where: { id: shipment.id },
       select: { deliveryFee: true },
@@ -133,7 +133,7 @@ export async function createCollectionPayment(tx: Tx, input: CollectionPaymentIn
 
   const payment = await tx.payment.create({
     data: {
-      reference: `PAY-\${randomUUID()}\`,
+      reference: `PAY-${randomUUID()}`,
       shipmentId: input.shipmentId,
       customerId,
       amount: moneyToString(amountMinor),
@@ -170,7 +170,7 @@ export async function createCollectionPayment(tx: Tx, input: CollectionPaymentIn
 export async function reverseShipmentFinancials(tx: Tx, shipmentId: string, reason: string, actorUserId: string) {
   if (reason.trim().length < 3) throw new Error("REASON_REQUIRED");
 
-  await tx.$queryRaw<{ id: string }[]>\`SELECT id FROM "Shipment" WHERE id = \${shipmentId} FOR UPDATE\`;
+  await tx.$queryRaw<{ id: string }[]>`SELECT id FROM "Shipment" WHERE id = ${shipmentId} FOR UPDATE`;
   const shipment = await tx.shipment.findUnique({
     where: { id: shipmentId },
     select: { id: true, financialStatus: true },
