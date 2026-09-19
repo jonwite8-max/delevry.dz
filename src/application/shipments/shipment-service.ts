@@ -4,6 +4,7 @@ import { can, permissionActions } from "@/domain/auth/permission-engine";
 import { createShipmentSchema, type CreateShipmentInput } from "@/domain/shipment/shipment-input";
 import { createShipmentReference } from "@/domain/shipment/shipment-reference";
 import { canTransition } from "@/domain/shipment/shipment-engine";
+import { reverseShipmentFinancials } from "@/application/finance/financial-transaction-service";
 import type { ShipmentStatus } from "@/domain/shipment/shipment-status";
 
 async function uniqueReference() {
@@ -76,6 +77,9 @@ export async function transitionShipment(role: string, userId: string, reference
     if (!shipment) throw new Error("SHIPMENT_NOT_FOUND");
     const fromStatus = shipment.status as ShipmentStatus;
     if (!canTransition(fromStatus, toStatus)) throw new Error("INVALID_TRANSITION");
+    if (toStatus === "CANCELLED" || toStatus === "RETURNED") {
+      await reverseShipmentFinancials(tx, shipment.id, reason ?? `Shipment ${toStatus.toLowerCase()}`);
+    }
     const updated = await tx.shipment.update({ where: { id: shipment.id }, data: { status: toStatus } });
     await tx.shipmentStatusHistory.create({ data: { shipmentId: shipment.id, fromStatus, toStatus, reason: reason?.trim() || undefined, changedByUserId: userId } });
     return updated;
