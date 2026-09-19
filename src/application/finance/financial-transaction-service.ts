@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@/generated/prisma/client";
+import { recordAudit } from "@/application/audit/audit-service";
 import { paymentMethods, paymentStatuses, paymentTypes, ledgerDirections, financialStatusFor, debtStatusFor, debtStatuses, validateCollectionAgainstDue } from "@/domain/finance/financial-engine";
 
 type Tx = Prisma.TransactionClient;
@@ -146,7 +147,7 @@ export async function createCollectionPayment(tx: Tx, input: CollectionPaymentIn
   return { payment, financial };
 }
 
-export async function reverseShipmentFinancials(tx: Tx, shipmentId: string, reason: string) {
+export async function reverseShipmentFinancials(tx: Tx, shipmentId: string, reason: string, actorUserId: string) {
   if (reason.trim().length < 3) throw new Error("REASON_REQUIRED");
 
   await tx.$queryRaw<{ id: string }[]>`SELECT id FROM "Shipment" WHERE id = ${shipmentId} FOR UPDATE`;
@@ -180,6 +181,15 @@ export async function reverseShipmentFinancials(tx: Tx, shipmentId: string, reas
         reason: reason.trim(),
       },
     });
+    await recordAudit({
+      actorUserId,
+      action: "REVERSE",
+      entityType: "Payment",
+      entityId: payment.id,
+      beforeData: payment,
+      afterData: { ...payment, status: paymentStatuses.REVERSED },
+      reason: reason.trim(),
+    }, tx);
   }
 
   const financial = await syncShipmentFinancialState(tx, shipmentId);
