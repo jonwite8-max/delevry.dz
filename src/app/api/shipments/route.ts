@@ -1,0 +1,2 @@
+import{NextResponse}from"next/server";import{createShipmentReference}from"@/domain/shipment/shipment-reference";
+export async function POST(req:Request){const b=await req.json();if(!b.senderName||!b.recipientName||!b.originWilaya||!b.destinationWilaya)return NextResponse.json({error:"الحقول الأساسية مطلوبة"},{status:400});const reference=createShipmentReference(Math.floor(Date.now()/1000)%1000000);return NextResponse.json({reference,trackingUrl:"/tracking?ref="+encodeURIComponent(reference)},{status:201})}
