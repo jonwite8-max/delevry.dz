@@ -1,18 +1,7 @@
 import { prisma } from "@/infrastructure/db/prisma";
 import { can, permissionActions } from "@/domain/auth/permission-engine";
 import { recordAudit } from "@/application/audit/audit-service";
-
-type CustomerInput = {
-  name: string;
-  businessName?: string;
-  phone: string;
-  additionalPhone?: string;
-  wilaya?: string;
-  commune?: string;
-  niche?: string;
-  address?: string;
-  notes?: string;
-};
+import { customerInputSchema, type CustomerInput } from "@/domain/customer/customer-input";
 
 function clean(value?: string) {
   const v = value?.trim();
@@ -20,24 +9,26 @@ function clean(value?: string) {
 }
 
 export async function createCustomer(role: string, userId: string, input: CustomerInput) {
-  if (!can(role, permissionActions.shipmentCreate)) throw new Error("FORBIDDEN");
+  if (!can(role, permissionActions.customerCreate)) throw new Error("FORBIDDEN");
 
-  const name = input.name.trim();
-  const phone = input.phone.trim();
-  if (name.length < 2 || phone.length < 3) throw new Error("INVALID_CUSTOMER");
+  const parsed = customerInputSchema.safeParse(input);
+  if (!parsed.success) throw new Error("INVALID_CUSTOMER");
+  const data = parsed.data;
+  const name = data.name;
+  const phone = data.phone;
 
   return prisma.$transaction(async (tx) => {
     const customer = await tx.customer.create({
       data: {
         name,
-        businessName: clean(input.businessName),
+        businessName: clean(data.businessName),
         phone,
-        additionalPhone: clean(input.additionalPhone),
-        wilaya: clean(input.wilaya),
-        commune: clean(input.commune),
-        niche: clean(input.niche),
-        address: clean(input.address),
-        notes: clean(input.notes),
+        additionalPhone: clean(data.additionalPhone),
+        wilaya: clean(data.wilaya),
+        commune: clean(data.commune),
+        niche: clean(data.niche),
+        address: clean(data.address),
+        notes: clean(data.notes),
         type: "REGISTERED",
         lifecycle: "NEW",
       },
@@ -56,7 +47,7 @@ export async function createCustomer(role: string, userId: string, input: Custom
 }
 
 export async function searchCustomers(role: string, query: string, page = 1, pageSize = 25) {
-  if (!can(role, permissionActions.shipmentRead)) throw new Error("FORBIDDEN");
+  if (!can(role, permissionActions.customerRead)) throw new Error("FORBIDDEN");
 
   const take = Math.min(100, Math.max(10, pageSize));
   const skip = (Math.max(1, page) - 1) * take;
