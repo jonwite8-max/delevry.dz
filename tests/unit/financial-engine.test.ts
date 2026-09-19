@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   debtStatusFor,
   financialStatusFor,
-  remainingDebt,
+  remainingDebt,\n  validateCollectionAgainstDue,
 } from "@/domain/finance/financial-engine";
 
 describe("FinancialEngine", () => {
@@ -18,5 +18,12 @@ describe("FinancialEngine", () => {
     expect(debtStatusFor(1000, 400)).toBe("PARTIALLY_SETTLED");
     expect(debtStatusFor(1000, 1000)).toBe("SETTLED");
     expect(remainingDebt(1000, 1200)).toBe(0);
+  });
+
+  it("rejects collection that exceeds the shipment amount due", () => {
+    expect(() => validateCollectionAgainstDue(1000, 0, 1001)).toThrow("AMOUNT_EXCEEDS_DUE");
+    expect(() => validateCollectionAgainstDue(1000, 700, 301)).toThrow("AMOUNT_EXCEEDS_DUE");
+    expect(() => validateCollectionAgainstDue(1000, 700, 300)).not.toThrow();
+  });
   });
 });
