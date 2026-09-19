@@ -1,5 +1,5 @@
 import { prisma } from "@/infrastructure/db/prisma";
-import type { AuditAction } from "@/generated/prisma/client";
+import type { Prisma, AuditAction } from "@/generated/prisma/client";
 
 type AuditInput = {
   actorUserId?: string;
@@ -13,7 +13,9 @@ type AuditInput = {
   userAgent?: string;
 };
 
-export async function recordAudit(input: AuditInput, tx = prisma) {
+type AuditDb = typeof prisma | Prisma.TransactionClient;
+
+export async function recordAudit(input: AuditInput, tx: AuditDb = prisma) {
   return tx.auditLog.create({
     data: {
       actorUserId: input.actorUserId,
