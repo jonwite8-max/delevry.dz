@@ -13,6 +13,11 @@ describe("PermissionEngine", () => {
     expect(can("STAFF", permissionActions.financePaymentCreate)).toBe(false);
   });
 
+  it("keeps shipment cancellation as a distinct permission", () => {
+    expect(can("ADMIN", permissionActions.shipmentCancel)).toBe(true);
+    expect(can("STAFF", permissionActions.shipmentCancel)).toBe(false);
+  });
+
   it("denies unknown roles", () => {
     expect(can("UNKNOWN", permissionActions.shipmentRead)).toBe(false);
   });
