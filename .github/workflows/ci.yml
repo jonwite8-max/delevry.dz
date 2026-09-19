@@ -13,6 +13,8 @@ jobs:
         with:
           node-version: 24
       - run: npm install
+      - name: Set CI database URL
+        run: echo "DATABASE_URL=postgresql://postgres:postgres@localhost:5432/delevry_ci?schema=public" >> "$GITHUB_ENV"
       - run: npm run db:generate
       - run: npm run typecheck
       - run: npm run lint
