@@ -202,6 +202,63 @@ describe("Finance transaction integration", () => {
     expect(entries.some((e) => e.direction === "OUT")).toBe(true);
   });
 
+  it("cancels a fully paid shipment, reverses payment, and records actor audit", async () => {
+    const { user, shipment } = await fixture();
+
+    const created = await prisma.$transaction((tx) => createCollectionPayment(tx, {
+      shipmentId: shipment.id,
+      amount: 1000,
+      method: "CASH",
+      createdByUserId: user.id,
+    }));
+
+    const { transitionShipment } = await import("@/application/shipments/shipment-service");
+    await transitionShipment("SUPER_ADMIN", user.id, shipment.reference, "CANCELLED", "full cancellation");
+
+    const payment = await prisma.payment.findUniqueOrThrow({ where: { id: created.payment.id } });
+    const current = await prisma.shipment.findUniqueOrThrow({ where: { id: shipment.id } });
+    const debt = await prisma.debt.findUnique({ where: { shipmentId: shipment.id } });
+    const reversal = await prisma.cashLedgerEntry.findFirst({
+      where: { referenceType: "Payment", referenceId: payment.id, type: "PAYMENT_REVERSAL", direction: "OUT" },
+    });
+    const audits = await prisma.auditLog.findMany({
+      where: { entityType: "Payment", entityId: payment.id, action: "REVERSE" },
+    });
+
+    expect(payment.status).toBe("REVERSED");
+    expect(current.status).toBe("CANCELLED");
+    expect(current.financialStatus).toBe("REFUNDED");
+    expect(debt).toBeNull();
+    expect(reversal?.amount.toString()).toBe("1000");
+    expect(audits.some((audit) => audit.actorUserId === user.id && audit.reason === "full cancellation")).toBe(true);
+  });
+
+  it("rejects settlement of a cancelled debt", async () => {
+    const { user, customer, shipment } = await fixture();
+
+    const created = await prisma.$transaction((tx) => createCollectionPayment(tx, {
+      shipmentId: shipment.id,
+      customerId: customer.id,
+      amount: 300,
+      method: "CASH",
+      createdByUserId: user.id,
+    }));
+
+    const debt = await prisma.debt.findUniqueOrThrow({ where: { shipmentId: shipment.id } });
+    const { transitionShipment } = await import("@/application/shipments/shipment-service");
+    await transitionShipment("ADMIN", user.id, shipment.reference, "CANCELLED", "cancel before settlement");
+
+    const cancelledDebt = await prisma.debt.findUniqueOrThrow({ where: { id: debt.id } });
+    expect(cancelledDebt.status).toBe("CANCELLED");
+
+    await expect(
+      settleDebt("SUPER_ADMIN", user.id, cancelledDebt.id, 700, "CASH", "must reject cancelled debt"),
+    ).rejects.toThrow("DEBT_CANCELLED");
+
+    const payment = await prisma.payment.findUniqueOrThrow({ where: { id: created.payment.id } });
+    expect(payment.status).toBe("REVERSED");
+  });
+
   it("reverses a partial payment and restores the debt", async () => {
     const { user, customer, shipment } = await fixture();
     const created = await prisma.$transaction((tx) => createCollectionPayment(tx, {
