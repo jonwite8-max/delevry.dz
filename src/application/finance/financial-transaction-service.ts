@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@/generated/prisma/client";
-import { paymentMethods, paymentStatuses, paymentTypes, ledgerDirections, financialStatusFor, debtStatusFor, validateCollectionAgainstDue } from "@/domain/finance/financial-engine";
+import { paymentMethods, paymentStatuses, paymentTypes, ledgerDirections, financialStatusFor, debtStatusFor, debtStatuses, validateCollectionAgainstDue } from "@/domain/finance/financial-engine";
 
 type Tx = Prisma.TransactionClient;
 
@@ -183,6 +183,10 @@ export async function reverseShipmentFinancials(tx: Tx, shipmentId: string, reas
   }
 
   const financial = await syncShipmentFinancialState(tx, shipmentId);
+  await tx.debt.updateMany({
+    where: { shipmentId },
+    data: { status: debtStatuses.CANCELLED },
+  });
   await tx.shipment.update({ where: { id: shipmentId }, data: { financialStatus: "REFUNDED" } });
 
   return {
