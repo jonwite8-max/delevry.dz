@@ -15,6 +15,8 @@ export type CollectionPaymentInput = {
 };
 
 export async function syncShipmentFinancialState(tx: Tx, shipmentId: string) {
+  await tx.$queryRaw<{ id: string }[]>`SELECT id FROM "Shipment" WHERE id = ${shipmentId} FOR UPDATE`;
+
   const shipment = await tx.shipment.findUnique({
     where: { id: shipmentId },
     select: { id: true, customerId: true, deliveryFee: true, financialStatus: true },
@@ -91,6 +93,7 @@ export async function createCollectionPayment(tx: Tx, input: CollectionPaymentIn
   const customerId = input.customerId ?? shipment?.customerId;
 
   if (shipment) {
+    await tx.$queryRaw<{ id: string }[]>`SELECT id FROM "Shipment" WHERE id = ${shipment.id} FOR UPDATE`;
     const due = Number((await tx.shipment.findUniqueOrThrow({
       where: { id: shipment.id },
       select: { deliveryFee: true },
