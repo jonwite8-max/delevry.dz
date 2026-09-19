@@ -1,45 +1,42 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client";
-import bcrypt from "bcryptjs";
+import * as bcrypt from "bcryptjs";
 
-const adapter = new PrismaPg({
-  connectionString: String(process.env["DATABASE_URL"]),
-});
+const databaseUrl = process.env["DATABASE_URL"];
+const email = process.env["DEMO_ADMIN_USER"] ?? "admin@delevry.dz";
+
+if (!databaseUrl) throw new Error("DATABASE_URL is required");
+
+const adapter = new PrismaPg({ connectionString: databaseUrl });
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
-  const password = process.env["DEMO_ADMIN_PASSWORD"] ?? "ChangeMe-123!";
-  const hash = await bcrypt.hash(password, 12);
+  const adminPassword = process.env["DEMO_ADMIN_PASSWORD"];
+  if (!adminPassword || adminPassword.length < 12) {
+    throw new Error("DEMO_ADMIN_PASSWORD is required and must contain at least 12 characters");
+  }
+
+  const hash = await bcrypt.hash(adminPassword, 12);
 
   await prisma.user.upsert({
-    where: { email: "admin@delevry.dz" },
+    where: { email },
     update: { passwordHash: hash, role: "SUPER_ADMIN", status: "ACTIVE" },
     create: {
-      name: "Super Admin",
-      email: "admin@delevry.dz",
-      passwordHash: hash,
-      role: "SUPER_ADMIN",
+      name: "Super Admin", email, passwordHash: hash, role: "SUPER_ADMIN",
     },
   });
 
   await prisma.cashAccount.upsert({
-    where: { id: "main-cash" },
-    update: {},
-    create: {
-      id: "main-cash",
-      name: "الخزينة الرئيسية",
-      currency: "DZD",
-    },
+    where: { id: "main-cash" }, update: {},
+    create: { id: "main-cash", name: "الخزينة الرئيسية", currency: "DZD" },
   });
 
-  console.log("Seed complete: admin@delevry.dz");
+  console.log(`Seed complete: ${email}`);
 }
 
-main()
-  .catch((error) => {
-    console.error(error);
-    process.exitCode = 1;
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+}).finally(async () => {
+  await prisma.$disconnect();
+});
