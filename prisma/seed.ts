@@ -3,19 +3,19 @@ import { PrismaClient } from "../src/generated/prisma/client";
 import * as bcrypt from "bcryptjs";
 
 const databaseUrl = process.env["DATABASE_URL"];
-const password = process.env["DEMO_ADMIN_PASSWORD"];
 const email = process.env["DEMO_ADMIN_USER"] ?? "admin@delevry.dz";
 
 if (!databaseUrl) throw new Error("DATABASE_URL is required");
-if (!password || password.length < 12) {
-  throw new Error("DEMO_ADMIN_PASSWORD is required and must contain at least 12 characters");
-}
 
 const adapter = new PrismaPg({ connectionString: databaseUrl });
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
-  const adminPassword = password;
+  const adminPassword = process.env["DEMO_ADMIN_PASSWORD"];
+  if (!adminPassword || adminPassword.length < 12) {
+    throw new Error("DEMO_ADMIN_PASSWORD is required and must contain at least 12 characters");
+  }
+
   const hash = await bcrypt.hash(adminPassword, 12);
 
   await prisma.user.upsert({
