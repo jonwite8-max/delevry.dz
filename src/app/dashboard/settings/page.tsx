@@ -1,0 +1,1 @@
+export default function Settings(){return <section className="p-6 md:p-8"><h1 className="text-3xl font-bold">الإعدادات</h1><div className="mt-6 grid gap-4 md:grid-cols-2">{["الشركة والفروع","الولايات والبلديات","التسعير","طرق الدفع","الطباعة وQR","الملفات","النسخ الاحتياطي","سجل التدقيق"].map(x=><div key={x} className="rounded-2xl border bg-white p-5">{x}</div>)}</div></section>}
