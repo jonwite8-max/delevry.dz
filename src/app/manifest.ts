@@ -1,0 +1,2 @@
+import type { MetadataRoute } from "next";
+export default function manifest():MetadataRoute.Manifest{return{name:"Delevry DZ",short_name:"Delevry",description:"منصة إدارة شركة التوصيل وتتبع الطرود",start_url:"/",display:"standalone",background_color:"#f5f7fa",theme_color:"#0f766e",lang:"ar",dir:"rtl",icons:[{src:"/icon.svg",sizes:"any",type:"image/svg+xml"}]}}
