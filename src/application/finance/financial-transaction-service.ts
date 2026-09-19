@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@/generated/prisma/client";
 import { recordAudit } from "@/application/audit/audit-service";
-import { paymentMethods, paymentStatuses, paymentTypes, ledgerDirections, financialStatusFor, debtStatusFor, debtStatuses, validateCollectionAgainstDue } from "@/domain/finance/financial-engine";
+import { paymentMethods, paymentStatuses, paymentTypes, ledgerDirections, financialStatusFor, debtStatusFor, debtStatuses, validateCollectionAgainstDue, moneyFromDatabase, moneyToNumber, moneyToString } from "@/domain/finance/financial-engine";
 
 type Tx = Prisma.TransactionClient;
 
@@ -33,9 +33,11 @@ export async function syncShipmentFinancialState(tx: Tx, shipmentId: string) {
     _sum: { amount: true },
   });
 
-  const collected = Number(aggregate._sum.amount ?? 0);
-  const due = Number(shipment.deliveryFee);
-  const financialStatus = financialStatusFor(due, collected);
+  const collectedMinor = moneyFromDatabase(aggregate._sum.amount?.toString() ?? "0", "INVALID_COLLECTED");
+  const dueMinor = moneyFromDatabase(shipment.deliveryFee.toString(), "INVALID_TOTAL_DUE");
+  const collected = moneyToNumber(collectedMinor);
+  const due = moneyToNumber(dueMinor);
+  const financialStatus = financialStatusFor(shipment.deliveryFee.toString(), aggregate._sum.amount?.toString() ?? "0");
 
   await tx.shipment.update({
     where: { id: shipment.id },
@@ -53,23 +55,23 @@ export async function syncShipmentFinancialState(tx: Tx, shipmentId: string) {
       where: { shipmentId: shipment.id },
       update: {
         customerId: shipment.customerId,
-        settledAmount: String(collected),
-        status: debtStatusFor(due, collected),
+        settledAmount: moneyToString(collectedMinor),
+        status: debtStatusFor(shipment.deliveryFee.toString(), aggregate._sum.amount?.toString() ?? "0"),
       },
       create: {
         customerId: shipment.customerId,
         shipmentId: shipment.id,
-        originalAmount: String(due),
-        settledAmount: String(collected),
-        status: debtStatusFor(due, collected),
+        originalAmount: moneyToString(dueMinor),
+        settledAmount: moneyToString(collectedMinor),
+        status: debtStatusFor(shipment.deliveryFee.toString(), aggregate._sum.amount?.toString() ?? "0"),
       },
     });
   } else {
     await tx.debt.updateMany({
       where: { shipmentId: shipment.id },
       data: {
-        settledAmount: String(Math.min(collected, due)),
-        status: debtStatusFor(due, Math.min(collected, due)),
+        settledAmount: moneyToString(collectedMinor < dueMinor ? collectedMinor : dueMinor),
+        status: debtStatusFor(shipment.deliveryFee.toString(), collectedMinor < dueMinor ? aggregate._sum.amount?.toString() ?? "0" : shipment.deliveryFee.toString()),
       },
     });
     debtAfter = await tx.debt.findUnique({ where: { shipmentId } });
@@ -79,7 +81,8 @@ export async function syncShipmentFinancialState(tx: Tx, shipmentId: string) {
 }
 
 export async function createCollectionPayment(tx: Tx, input: CollectionPaymentInput) {
-  if (!Number.isFinite(input.amount) || input.amount <= 0) throw new Error("INVALID_AMOUNT");
+  const amountMinor = moneyFromDatabase(input.amount, "INVALID_AMOUNT");
+  if (amountMinor <= 0n) throw new Error("INVALID_AMOUNT");
   if (!Object.values(paymentMethods).includes(input.method as never)) throw new Error("INVALID_METHOD");
   if (!input.shipmentId && !input.customerId) throw new Error("PAYMENT_TARGET_REQUIRED");
 
@@ -95,10 +98,10 @@ export async function createCollectionPayment(tx: Tx, input: CollectionPaymentIn
 
   if (shipment) {
     await tx.$queryRaw<{ id: string }[]>`SELECT id FROM "Shipment" WHERE id = ${shipment.id} FOR UPDATE`;
-    const due = Number((await tx.shipment.findUniqueOrThrow({
+    const shipmentDue = await tx.shipment.findUniqueOrThrow({
       where: { id: shipment.id },
       select: { deliveryFee: true },
-    })).deliveryFee);
+    });
     const aggregate = await tx.payment.aggregate({
       where: {
         shipmentId: shipment.id,
@@ -107,14 +110,14 @@ export async function createCollectionPayment(tx: Tx, input: CollectionPaymentIn
       },
       _sum: { amount: true },
     });
-    validateCollectionAgainstDue(due, Number(aggregate._sum.amount ?? 0), input.amount);
+    validateCollectionAgainstDue(shipmentDue.deliveryFee.toString(), aggregate._sum.amount?.toString() ?? "0", moneyToString(amountMinor));
   }
   const payment = await tx.payment.create({
     data: {
       reference: `PAY-${randomUUID()}`,
       shipmentId: input.shipmentId,
       customerId,
-      amount: String(input.amount),
+      amount: moneyToString(amountMinor),
       method: input.method,
       type: paymentTypes.COLLECTION,
       status: paymentStatuses.VALID,
@@ -132,7 +135,7 @@ export async function createCollectionPayment(tx: Tx, input: CollectionPaymentIn
     data: {
       cashAccountId: cash.id,
       type: input.ledgerType ?? "PAYMENT",
-      amount: String(input.amount),
+      amount: moneyToString(amountMinor),
       direction: ledgerDirections.IN,
       referenceType: "Payment",
       referenceId: payment.id,
@@ -202,7 +205,7 @@ export async function reverseShipmentFinancials(tx: Tx, shipmentId: string, reas
   return {
     shipmentId,
     reversedPaymentIds: payments.map((payment) => payment.id),
-    refundedAmount: payments.reduce((sum, payment) => sum + Number(payment.amount), 0),
+    refundedAmount: moneyToNumber(payments.reduce((sum, payment) => sum + moneyFromDatabase(payment.amount.toString()), 0n)),
     financial,
   };
 }
