@@ -67,7 +67,10 @@ export async function listShipments(role: string, query: { search?: string; stat
 }
 
 export async function transitionShipment(role: string, userId: string, reference: string, toStatus: ShipmentStatus, reason?: string) {
-  if (!can(role, permissionActions.shipmentUpdateStatus)) throw new Error("FORBIDDEN");
+  const requiredPermission = toStatus === "CANCELLED"
+    ? permissionActions.shipmentCancel
+    : permissionActions.shipmentUpdateStatus;
+  if (!can(role, requiredPermission)) throw new Error("FORBIDDEN");
   return prisma.$transaction(async (tx) => {
     const shipment = await tx.shipment.findUnique({ where: { reference }, select: { id: true, reference: true, status: true } });
     if (!shipment) throw new Error("SHIPMENT_NOT_FOUND");
