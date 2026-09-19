@@ -10,6 +10,7 @@ export async function settleDebt(role: string, userId: string, debtId: string, a
   if (!Object.values(paymentMethods).includes(method as never)) throw new Error("INVALID_METHOD");
 
   return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw<{ id: string }[]>`SELECT id FROM "Debt" WHERE id = ${debtId} FOR UPDATE`;
     const debt = await tx.debt.findUnique({
       where: { id: debtId },
       select: { id: true, customerId: true, shipmentId: true, originalAmount: true, settledAmount: true, status: true },
