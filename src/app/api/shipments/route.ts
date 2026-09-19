@@ -1,27 +1,15 @@
 import { NextResponse } from "next/server";
-import { randomInt } from "node:crypto";
-import { z } from "zod";
-import { prisma } from "@/infrastructure/db/prisma";
+import { can, permissionActions } from "@/domain/auth/permission-engine";
+import { createShipment } from "@/application/shipments/shipment-service";
 import { getSession } from "@/shared/auth/session";
-import { createShipmentSchema } from "@/domain/shipment/shipment-input";
-import { createShipmentReference } from "@/domain/shipment/shipment-reference";
-
-async function uniqueReference() {
-  for (let attempt = 0; attempt < 10; attempt += 1) {
-    const reference = createShipmentReference(randomInt(100000, 1000000));
-    const exists = await prisma.shipment.findUnique({ where: { reference }, select: { id: true } });
-    if (!exists) return reference;
-  }
-  throw new Error("Unable to allocate shipment reference");
-}
-
-function decimalInput(value: number | undefined) {
-  return value === undefined ? undefined : String(value);
-}
+import { prisma } from "@/infrastructure/db/prisma";
 
 export async function GET(req: Request) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
+  if (!can(session.role, permissionActions.shipmentRead)) {
+    return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
+  }
 
   const url = new URL(req.url);
   const page = Math.max(1, Number(url.searchParams.get("page") ?? "1") || 1);
@@ -75,52 +63,24 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "صيغة البيانات غير صحيحة" }, { status: 400 });
   }
 
-  const parsed = createShipmentSchema.safeParse(body);
-  if (!parsed.success) {
+  try {
+    const shipment = await createShipment(session.role, session.userId, body);
     return NextResponse.json(
-      { error: "بيانات الطرد غير صحيحة", details: z.flattenError(parsed.error) },
-      { status: 400 },
-    );
-  }
-
-  const input = parsed.data;
-  const reference = await uniqueReference();
-
-  const shipment = await prisma.$transaction(async (tx) => {
-    const created = await tx.shipment.create({
-      data: {
-        reference,
-        serialNumber: reference,
-        senderName: input.senderName,
-        senderPhone: input.senderPhone || undefined,
-        recipientName: input.recipientName,
-        recipientPhone: input.recipientPhone || undefined,
-        originWilaya: input.originWilaya,
-        originCommune: input.originCommune || undefined,
-        destinationWilaya: input.destinationWilaya,
-        destinationCommune: input.destinationCommune || undefined,
-        description: input.description,
-        quantity: input.quantity,
-        weight: decimalInput(input.weight),
-        volume: decimalInput(input.volume),
-        deliveryFee: String(input.deliveryFee),
-        createdByUserId: session.userId,
-        status: "NEW",
-        financialStatus: "UNPAID",
+      {
+        reference: shipment.reference,
+        serialNumber: shipment.serialNumber,
+        trackingUrl: "/tracking?ref=" + encodeURIComponent(shipment.reference),
       },
-    });
-    await tx.shipmentStatusHistory.create({
-      data: { shipmentId: created.id, toStatus: "NEW", changedByUserId: session.userId },
-    });
-    return created;
-  });
-
-  return NextResponse.json(
-    {
-      reference: shipment.reference,
-      serialNumber: shipment.serialNumber,
-      trackingUrl: "/tracking?ref=" + encodeURIComponent(shipment.reference),
-    },
-    { status: 201 },
-  );
+      { status: 201 },
+    );
+  } catch (error) {
+    if (error instanceof Error && error.message === "FORBIDDEN") {
+      return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
+    }
+    if (error instanceof Error && error.message === "INVALID_SHIPMENT") {
+      return NextResponse.json({ error: "بيانات الطرد غير صحيحة" }, { status: 400 });
+    }
+    console.error("create shipment failed", error);
+    return NextResponse.json({ error: "تعذر إنشاء الطرد" }, { status: 500 });
+  }
 }
