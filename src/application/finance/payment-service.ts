@@ -31,7 +31,7 @@ async function uniquePaymentReference(tx: Parameters<Parameters<typeof prisma.$t
 }
 
 export async function recordPayment(role: string, userId: string, input: PaymentInput) {
-  if (!can(role, permissionActions.financeRead)) throw new Error("FORBIDDEN");
+  if (!can(role, permissionActions.financePaymentCreate)) throw new Error("FORBIDDEN");
   if (!Number.isFinite(input.amount) || input.amount <= 0) throw new Error("INVALID_AMOUNT");
   if (!Object.values(paymentMethods).includes(input.method as never)) throw new Error("INVALID_METHOD");
   const type = input.type ?? paymentTypes.COLLECTION;
@@ -106,7 +106,7 @@ export async function recordPayment(role: string, userId: string, input: Payment
 }
 
 export async function reversePayment(role: string, userId: string, paymentId: string, reason: string) {
-  if (!can(role, permissionActions.financeRead)) throw new Error("FORBIDDEN");
+  if (!can(role, permissionActions.financePaymentReverse)) throw new Error("FORBIDDEN");
   if (reason.trim().length < 3) throw new Error("REASON_REQUIRED");
 
   return prisma.$transaction(async (tx) => {
