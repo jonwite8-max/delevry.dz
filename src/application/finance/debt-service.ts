@@ -15,6 +15,7 @@ export async function settleDebt(role: string, userId: string, debtId: string, a
       select: { id: true, customerId: true, shipmentId: true, originalAmount: true, settledAmount: true, status: true },
     });
     if (!debt) throw new Error("DEBT_NOT_FOUND");
+    if (debt.status === "CANCELLED") throw new Error("DEBT_CANCELLED");
 
     const remaining = remainingDebt(Number(debt.originalAmount), Number(debt.settledAmount));
     if (amount > remaining) throw new Error("AMOUNT_EXCEEDS_DEBT");
