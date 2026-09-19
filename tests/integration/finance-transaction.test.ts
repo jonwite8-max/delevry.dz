@@ -111,4 +111,25 @@ describe("Finance transaction integration", () => {
     expect(entries.some((e) => e.direction === "IN")).toBe(true);
     expect(entries.some((e) => e.direction === "OUT")).toBe(true);
   });
+  it("reverses a partial payment and restores the debt", async () => {
+    const { user, customer, shipment } = await fixture();
+    const created = await prisma.$transaction((tx) => createCollectionPayment(tx, {
+      shipmentId: shipment.id,
+      customerId: customer.id,
+      amount: 300,
+      method: "CASH",
+      createdByUserId: user.id,
+    }));
+    expect(created.financial?.financialStatus).toBe("PARTIALLY_PAID");
+    expect(created.financial?.debtAfter?.settledAmount.toString()).toBe("300");
+
+    await reversePayment("SUPER_ADMIN", user.id, created.payment.id, "partial integration reversal");
+
+    const current = await prisma.shipment.findUniqueOrThrow({ where: { id: shipment.id } });
+    const debt = await prisma.debt.findUniqueOrThrow({ where: { shipmentId: shipment.id } });
+    expect(current.financialStatus).toBe("UNPAID");
+    expect(debt.status).toBe("OPEN");
+    expect(debt.settledAmount.toString()).toBe("0");
+  });
+
 });
