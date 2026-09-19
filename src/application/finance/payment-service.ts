@@ -1,6 +1,6 @@
 import { prisma } from "@/infrastructure/db/prisma";
 import { can, permissionActions } from "@/domain/auth/permission-engine";
-import { paymentMethods, paymentStatuses, paymentTypes, ledgerDirections } from "@/domain/finance/financial-engine";
+import { paymentStatuses, paymentTypes, ledgerDirections } from "@/domain/finance/financial-engine";
 import { recordAudit } from "@/application/audit/audit-service";
 import { createCollectionPayment, syncShipmentFinancialState } from "@/application/finance/financial-transaction-service";
 
@@ -38,9 +38,11 @@ export async function recordPayment(role: string, userId: string, input: Payment
       reason: input.reason,
     }, tx);
 
-    if (result.financial?.debtBefore?.id !== result.financial?.debtAfter?.id ||
-        result.financial?.debtBefore?.settledAmount.toString() !== result.financial?.debtAfter?.settledAmount.toString() ||
-        result.financial?.debtBefore?.status !== result.financial?.debtAfter?.status) {
+    if (result.financial && (
+      result.financial.debtBefore?.id !== result.financial.debtAfter?.id ||
+      String(result.financial.debtBefore?.settledAmount ?? "") !== String(result.financial.debtAfter?.settledAmount ?? "") ||
+      result.financial.debtBefore?.status !== result.financial.debtAfter?.status
+    )) {
       await recordAudit({
         actorUserId: userId,
         action: "UPDATE",
@@ -100,9 +102,11 @@ export async function reversePayment(role: string, userId: string, paymentId: st
       reason: reason.trim(),
     }, tx);
 
-    if (financial?.debtBefore?.id !== financial?.debtAfter?.id ||
-        financial?.debtBefore?.settledAmount.toString() !== financial?.debtAfter?.settledAmount.toString() ||
-        financial?.debtBefore?.status !== financial?.debtAfter?.status) {
+    if (financial && (
+      financial.debtBefore?.id !== financial.debtAfter?.id ||
+      String(financial.debtBefore?.settledAmount ?? "") !== String(financial.debtAfter?.settledAmount ?? "") ||
+      financial.debtBefore?.status !== financial.debtAfter?.status
+    )) {
       await recordAudit({
         actorUserId: userId,
         action: "UPDATE",
