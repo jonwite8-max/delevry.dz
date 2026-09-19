@@ -75,6 +75,25 @@ export async function recordPayment(role: string, userId: string, input: Payment
         where: { id: shipment.id },
         data: { financialStatus: financialStatusFor(due, collected) },
       });
+
+      if (collected < due && shipment.customerId) {
+        await tx.debt.upsert({
+          where: { shipmentId: shipment.id },
+          update: { settledAmount: String(collected), status: debtStatusFor(due, collected) },
+          create: {
+            customerId: shipment.customerId,
+            shipmentId: shipment.id,
+            originalAmount: String(due),
+            settledAmount: String(collected),
+            status: debtStatusFor(due, collected),
+          },
+        });
+      } else if (collected >= due) {
+        await tx.debt.updateMany({
+          where: { shipmentId: shipment.id },
+          data: { settledAmount: String(due), status: debtStatusFor(due, due) },
+        });
+      }
     }
 
     const cash = await tx.cashAccount.findUnique({ where: { id: "main-cash" }, select: { id: true } });
@@ -144,10 +163,23 @@ export async function reversePayment(role: string, userId: string, paymentId: st
           where: { shipmentId: shipment.id, status: paymentStatuses.VALID, type: paymentTypes.COLLECTION },
           _sum: { amount: true },
         });
+        const collected = Number(aggregate._sum.amount ?? 0);
+        const due = Number(shipment.deliveryFee);
         await tx.shipment.update({
           where: { id: shipment.id },
-          data: { financialStatus: financialStatusFor(Number(shipment.deliveryFee), Number(aggregate._sum.amount ?? 0)) },
+          data: { financialStatus: financialStatusFor(due, collected) },
         });
+        if (collected < due) {
+          await tx.debt.updateMany({
+            where: { shipmentId: shipment.id },
+            data: { settledAmount: String(collected), status: debtStatusFor(due, collected) },
+          });
+        } else {
+          await tx.debt.updateMany({
+            where: { shipmentId: shipment.id },
+            data: { settledAmount: String(due), status: debtStatusFor(due, due) },
+          });
+        }
       }
     }
 
