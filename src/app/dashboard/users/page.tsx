@@ -1,0 +1,1 @@
+export default function Users(){return <section className="p-6 md:p-8"><h1 className="text-3xl font-bold">المستخدمون والصلاحيات</h1><div className="mt-6 rounded-2xl border bg-white p-6">Super Admin · Admin · Staff · User<p className="mt-2 text-sm text-slate-500">التحقق من الصلاحيات سيكون على الخادم.</p></div></section>}
