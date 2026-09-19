@@ -2,6 +2,7 @@ import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { prisma } from "@/infrastructure/db/prisma";
 import { createCollectionPayment } from "@/application/finance/financial-transaction-service";
 import { reversePayment } from "@/application/finance/payment-service";
+import { settleDebt } from "@/application/finance/debt-service";
 
 async function fixture() {
   const user = await prisma.user.create({
@@ -70,13 +71,41 @@ describe("Finance transaction integration", () => {
     expect(second.financial?.debtAfter?.status).toBe("SETTLED");
 
     const payments = await prisma.payment.findMany({ where: { shipmentId: shipment.id, status: "VALID" } });
-    const ledger = await prisma.cashLedgerEntry.findMany({ where: { referenceType: "Payment", referenceId: { in: payments.map((p) => p.id) } } });
+    const ledger = await prisma.cashLedgerEntry.findMany({
+      where: { referenceType: "Payment", referenceId: { in: payments.map((p) => p.id) } },
+    });
     expect(payments.reduce((sum, p) => sum + Number(p.amount), 0)).toBe(1000);
     expect(ledger.reduce((sum, e) => sum + Number(e.amount), 0)).toBe(1000);
   });
 
-  it("rejects overpayment before creating payment or ledger entry", async () => {
+  it("settles the remaining debt through the central debt service", async () => {
     const { user, customer, shipment } = await fixture();
+
+    await prisma.$transaction((tx) => createCollectionPayment(tx, {
+      shipmentId: shipment.id,
+      customerId: customer.id,
+      amount: 400,
+      method: "CASH",
+      createdByUserId: user.id,
+    }));
+
+    const debt = await prisma.debt.findUniqueOrThrow({ where: { shipmentId: shipment.id } });
+    expect(debt.status).toBe("PARTIALLY_SETTLED");
+
+    const settled = await settleDebt("SUPER_ADMIN", user.id, debt.id, 600, "CASH", "integration settlement");
+    expect(settled.debt.status).toBe("SETTLED");
+
+    const current = await prisma.shipment.findUniqueOrThrow({ where: { id: shipment.id } });
+    expect(current.financialStatus).toBe("PAID");
+
+    const payments = await prisma.payment.findMany({ where: { shipmentId: shipment.id, status: "VALID" } });
+    expect(payments.reduce((sum, p) => sum + Number(p.amount), 0)).toBe(1000);
+  });
+
+  it("rejects overpayment without creating payment or ledger entry", async () => {
+    const { user, customer, shipment } = await fixture();
+    const paymentCountBefore = await prisma.payment.count({ where: { shipmentId: shipment.id } });
+    const ledgerCountBefore = await prisma.cashLedgerEntry.count({ where: { type: "PAYMENT", referenceType: "Payment" } });
 
     await expect(prisma.$transaction((tx) => createCollectionPayment(tx, {
       shipmentId: shipment.id,
@@ -86,8 +115,38 @@ describe("Finance transaction integration", () => {
       createdByUserId: user.id,
     }))).rejects.toThrow("AMOUNT_EXCEEDS_DUE");
 
-    expect(await prisma.payment.count({ where: { shipmentId: shipment.id } })).toBe(0);
-    expect(await prisma.cashLedgerEntry.count({ where: { referenceType: "Payment" } })).toBeGreaterThanOrEqual(0);
+    expect(await prisma.payment.count({ where: { shipmentId: shipment.id } })).toBe(paymentCountBefore);
+    expect(await prisma.cashLedgerEntry.count({ where: { type: "PAYMENT", referenceType: "Payment" } })).toBe(ledgerCountBefore);
+  });
+
+  it("allows only the non-overpaying transaction under concurrent collection attempts", async () => {
+    const { user, customer, shipment } = await fixture();
+
+    const results = await Promise.allSettled([
+      prisma.$transaction((tx) => createCollectionPayment(tx, {
+        shipmentId: shipment.id,
+        customerId: customer.id,
+        amount: 600,
+        method: "CASH",
+        createdByUserId: user.id,
+      })),
+      prisma.$transaction((tx) => createCollectionPayment(tx, {
+        shipmentId: shipment.id,
+        customerId: customer.id,
+        amount: 600,
+        method: "CASH",
+        createdByUserId: user.id,
+      })),
+    ]);
+
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
+
+    const payments = await prisma.payment.findMany({ where: { shipmentId: shipment.id, status: "VALID" } });
+    expect(payments.reduce((sum, p) => sum + Number(p.amount), 0)).toBe(600);
+
+    const current = await prisma.shipment.findUniqueOrThrow({ where: { id: shipment.id } });
+    expect(current.financialStatus).toBe("PARTIALLY_PAID");
   });
 
   it("reverses a full payment and returns shipment to unpaid", async () => {
@@ -111,6 +170,7 @@ describe("Finance transaction integration", () => {
     expect(entries.some((e) => e.direction === "IN")).toBe(true);
     expect(entries.some((e) => e.direction === "OUT")).toBe(true);
   });
+
   it("reverses a partial payment and restores the debt", async () => {
     const { user, customer, shipment } = await fixture();
     const created = await prisma.$transaction((tx) => createCollectionPayment(tx, {
@@ -131,5 +191,4 @@ describe("Finance transaction integration", () => {
     expect(debt.status).toBe("OPEN");
     expect(debt.settledAmount.toString()).toBe("0");
   });
-
 });
