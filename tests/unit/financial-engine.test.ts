@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   debtStatusFor,
   financialStatusFor,
-  remainingDebt,\n  validateCollectionAgainstDue,
+  remainingDebt,
+  validateCollectionAgainstDue,
 } from "@/domain/finance/financial-engine";
 
 describe("FinancialEngine", () => {
@@ -24,6 +25,5 @@ describe("FinancialEngine", () => {
     expect(() => validateCollectionAgainstDue(1000, 0, 1001)).toThrow("AMOUNT_EXCEEDS_DUE");
     expect(() => validateCollectionAgainstDue(1000, 700, 301)).toThrow("AMOUNT_EXCEEDS_DUE");
     expect(() => validateCollectionAgainstDue(1000, 700, 300)).not.toThrow();
-  });
   });
 });
