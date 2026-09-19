@@ -1,7 +1,8 @@
 import { prisma } from "@/infrastructure/db/prisma";
 import { can, permissionActions } from "@/domain/auth/permission-engine";
-import { debtStatusFor, remainingDebt, paymentMethods, paymentStatuses, paymentTypes, ledgerDirections } from "@/domain/finance/financial-engine";
+import { paymentMethods, debtStatusFor, remainingDebt } from "@/domain/finance/financial-engine";
 import { recordAudit } from "@/application/audit/audit-service";
+import { createCollectionPayment } from "@/application/finance/financial-transaction-service";
 
 export async function settleDebt(role: string, userId: string, debtId: string, amount: number, method: string, reason?: string) {
   if (!can(role, permissionActions.debtSettle)) throw new Error("FORBIDDEN");
@@ -15,45 +16,30 @@ export async function settleDebt(role: string, userId: string, debtId: string, a
     });
     if (!debt) throw new Error("DEBT_NOT_FOUND");
 
-    const original = Number(debt.originalAmount);
-    const settled = Number(debt.settledAmount);
-    const remaining = remainingDebt(original, settled);
+    const remaining = remainingDebt(Number(debt.originalAmount), Number(debt.settledAmount));
     if (amount > remaining) throw new Error("AMOUNT_EXCEEDS_DEBT");
 
-    const paymentReference = `PAY-DEBT-${Date.now()}-${Math.floor(Math.random() * 9000 + 1000)}`;
-    const payment = await tx.payment.create({
-      data: {
-        reference: paymentReference,
-        shipmentId: debt.shipmentId ?? undefined,
-        customerId: debt.customerId,
-        amount: String(amount),
-        method,
-        type: paymentTypes.COLLECTION,
-        status: paymentStatuses.VALID,
-        createdByUserId: userId,
-      },
+    const result = await createCollectionPayment(tx, {
+      shipmentId: debt.shipmentId ?? undefined,
+      customerId: debt.customerId,
+      amount,
+      method,
+      createdByUserId: userId,
+      reason,
+      ledgerType: "DEBT_SETTLEMENT",
     });
 
-    const nextSettled = settled + amount;
-    const updated = await tx.debt.update({
-      where: { id: debt.id },
-      data: { settledAmount: String(nextSettled), status: debtStatusFor(original, nextSettled) },
-    });
+    const updated = await tx.debt.findUnique({ where: { id: debt.id } });
+    if (!updated) throw new Error("DEBT_NOT_FOUND");
 
-    const cash = await tx.cashAccount.findUnique({ where: { id: "main-cash" }, select: { id: true } });
-    if (!cash) throw new Error("MAIN_CASH_NOT_FOUND");
-
-    await tx.cashLedgerEntry.create({
-      data: {
-        cashAccountId: cash.id,
-        type: "DEBT_SETTLEMENT",
-        amount: String(amount),
-        direction: ledgerDirections.IN,
-        referenceType: "Payment",
-        referenceId: payment.id,
-        reason: reason?.trim() || undefined,
-      },
-    });
+    await recordAudit({
+      actorUserId: userId,
+      action: "CREATE",
+      entityType: "Payment",
+      entityId: result.payment.id,
+      afterData: result.payment,
+      reason,
+    }, tx);
 
     await recordAudit({
       actorUserId: userId,
@@ -65,6 +51,6 @@ export async function settleDebt(role: string, userId: string, debtId: string, a
       reason,
     }, tx);
 
-    return { debt: updated, payment };
+    return { debt: updated, payment: result.payment };
   });
 }
