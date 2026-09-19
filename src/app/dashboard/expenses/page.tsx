@@ -1,0 +1,1 @@
+export default function Expenses(){return <section className="p-6 md:p-8"><h1 className="text-3xl font-bold">المصاريف</h1><div className="mt-6 rounded-2xl border bg-white p-6"><button className="rounded-xl bg-teal-600 px-4 py-3 text-white">+ تسجيل مصروف</button><p className="mt-5 text-sm text-slate-500">كل مصروف سيُربط بمحرك الخزينة وسجل التدقيق.</p></div></section>}
