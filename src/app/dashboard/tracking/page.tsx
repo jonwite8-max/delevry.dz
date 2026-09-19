@@ -1,0 +1,1 @@
+export default function Tracking(){return <section className="p-6 md:p-8"><h1 className="text-3xl font-bold">التتبع</h1><p className="mt-2 text-slate-500">تاريخ الحالات، QR والرقم التسلسلي.</p></section>}
