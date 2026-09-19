@@ -1,0 +1,1 @@
+export const shipmentStatuses=["NEW","PROCESSING","RECEIVED","IN_TRANSIT","ARRIVED","READY_FOR_PICKUP","DELIVERED","CANCELLED","RETURNED","ISSUE"] as const;export type ShipmentStatus=typeof shipmentStatuses[number];
