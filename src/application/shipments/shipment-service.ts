@@ -78,7 +78,7 @@ export async function transitionShipment(role: string, userId: string, reference
     const fromStatus = shipment.status as ShipmentStatus;
     if (!canTransition(fromStatus, toStatus)) throw new Error("INVALID_TRANSITION");
     if (toStatus === "CANCELLED" || toStatus === "RETURNED") {
-      await reverseShipmentFinancials(tx, shipment.id, reason ?? `Shipment ${toStatus.toLowerCase()}`);
+      await reverseShipmentFinancials(tx, shipment.id, reason ?? `Shipment ${toStatus.toLowerCase()}`, userId);
     }
     const updated = await tx.shipment.update({ where: { id: shipment.id }, data: { status: toStatus } });
     await tx.shipmentStatusHistory.create({ data: { shipmentId: shipment.id, fromStatus, toStatus, reason: reason?.trim() || undefined, changedByUserId: userId } });
