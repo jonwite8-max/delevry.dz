@@ -149,6 +149,37 @@ describe("Finance transaction integration", () => {
     expect(current.financialStatus).toBe("PARTIALLY_PAID");
   });
 
+  it("cancels a partially paid shipment and reverses cash without leaving outstanding debt", async () => {
+    const { user, customer, shipment } = await fixture();
+
+    const created = await prisma.$transaction((tx) => createCollectionPayment(tx, {
+      shipmentId: shipment.id,
+      customerId: customer.id,
+      amount: 300,
+      method: "CASH",
+      createdByUserId: user.id,
+    }));
+    expect(created.financial?.financialStatus).toBe("PARTIALLY_PAID");
+
+    const { transitionShipment } = await import("@/application/shipments/shipment-service");
+    const cancelled = await transitionShipment("ADMIN", user.id, shipment.reference, "CANCELLED", "customer cancellation");
+    expect(cancelled.status).toBe("CANCELLED");
+
+    const payment = await prisma.payment.findUniqueOrThrow({ where: { id: created.payment.id } });
+    expect(payment.status).toBe("REVERSED");
+
+    const debt = await prisma.debt.findUniqueOrThrow({ where: { shipmentId: shipment.id } });
+    expect(debt.status).toBe("CANCELLED");
+
+    const current = await prisma.shipment.findUniqueOrThrow({ where: { id: shipment.id } });
+    expect(current.financialStatus).toBe("REFUNDED");
+
+    const reversal = await prisma.cashLedgerEntry.findFirst({
+      where: { referenceType: "Payment", referenceId: payment.id, type: "PAYMENT_REVERSAL", direction: "OUT" },
+    });
+    expect(reversal).not.toBeNull();
+  });
+
   it("reverses a full payment and returns shipment to unpaid", async () => {
     const { user, shipment } = await fixture();
     const created = await prisma.$transaction((tx) => createCollectionPayment(tx, {
