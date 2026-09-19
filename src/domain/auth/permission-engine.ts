@@ -4,27 +4,26 @@ export const permissionActions = {
   shipmentUpdateStatus: "shipment:update-status",
   shipmentCancel: "shipment:cancel",
   financeRead: "finance:read",
+  financePaymentCreate: "finance:payment-create",
+  financePaymentReverse: "finance:payment-reverse",
+  debtSettle: "finance:debt-settle",
+  expenseCreate: "finance:expense-create",
   usersManage: "users:manage",
   settingsManage: "settings:manage",
 } as const;
 
-export type PermissionAction =
-  (typeof permissionActions)[keyof typeof permissionActions];
+export type PermissionAction = (typeof permissionActions)[keyof typeof permissionActions];
 
 const permissions: Record<string, readonly PermissionAction[]> = {
   SUPER_ADMIN: Object.values(permissionActions),
   ADMIN: [
-    permissionActions.shipmentCreate,
-    permissionActions.shipmentRead,
-    permissionActions.shipmentUpdateStatus,
-    permissionActions.shipmentCancel,
-    permissionActions.financeRead,
+    permissionActions.shipmentCreate, permissionActions.shipmentRead,
+    permissionActions.shipmentUpdateStatus, permissionActions.shipmentCancel,
+    permissionActions.financeRead, permissionActions.financePaymentCreate,
+    permissionActions.financePaymentReverse, permissionActions.debtSettle,
+    permissionActions.expenseCreate,
   ],
-  STAFF: [
-    permissionActions.shipmentCreate,
-    permissionActions.shipmentRead,
-    permissionActions.shipmentUpdateStatus,
-  ],
+  STAFF: [permissionActions.shipmentCreate, permissionActions.shipmentRead, permissionActions.shipmentUpdateStatus],
   USER: [permissionActions.shipmentRead],
 };
 
