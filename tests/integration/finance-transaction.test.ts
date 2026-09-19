@@ -102,6 +102,36 @@ describe("Finance transaction integration", () => {
     expect(payments.reduce((sum, p) => sum + Number(p.amount), 0)).toBe(1000);
   });
 
+  it("serializes concurrent debt settlements", async () => {
+    const { user, customer, shipment } = await fixture();
+
+    await prisma.$transaction((tx) => createCollectionPayment(tx, {
+      shipmentId: shipment.id,
+      customerId: customer.id,
+      amount: 400,
+      method: "CASH",
+      createdByUserId: user.id,
+    }));
+
+    const debt = await prisma.debt.findUniqueOrThrow({ where: { shipmentId: shipment.id } });
+    const results = await Promise.allSettled([
+      settleDebt("SUPER_ADMIN", user.id, debt.id, 400, "CASH", "concurrent debt settlement A"),
+      settleDebt("SUPER_ADMIN", user.id, debt.id, 400, "CASH", "concurrent debt settlement B"),
+    ]);
+
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
+
+    const currentDebt = await prisma.debt.findUniqueOrThrow({ where: { id: debt.id } });
+    expect(currentDebt.status).toBe("PARTIALLY_SETTLED");
+    expect(currentDebt.settledAmount.toString()).toBe("800");
+
+    const payments = await prisma.payment.findMany({
+      where: { shipmentId: shipment.id, status: "VALID", type: "COLLECTION" },
+    });
+    expect(payments.reduce((sum, payment) => sum + Number(payment.amount), 0)).toBe(800);
+  });
+
   it("rejects overpayment without creating payment or ledger entry", async () => {
     const { user, customer, shipment } = await fixture();
     const paymentCountBefore = await prisma.payment.count({ where: { shipmentId: shipment.id } });
