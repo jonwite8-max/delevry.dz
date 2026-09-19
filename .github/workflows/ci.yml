@@ -42,8 +42,10 @@ jobs:
       - run: npm test
       - run: npm run build
       - name: Package source artifact
+        if: always()
         run: git archive --format=zip --output="delevry-dz-foundation-${GITHUB_SHA}.zip" HEAD
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: delevry-dz-foundation-${{ github.sha }}
           path: delevry-dz-foundation-${{ github.sha }}.zip
