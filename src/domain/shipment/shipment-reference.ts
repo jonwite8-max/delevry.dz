@@ -1,0 +1,1 @@
+export function createShipmentReference(sequence:number,year=new Date().getFullYear()){return `DZ-${String(year).slice(-2)}${String(sequence).padStart(6,"0")}`}
