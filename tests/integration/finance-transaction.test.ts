@@ -268,6 +268,10 @@ describe("Finance transaction integration", () => {
       createdByUserId: user.id,
     }));
 
+    const originalLedger = await prisma.cashLedgerEntry.findFirstOrThrow({
+      where: { referenceType: "Payment", referenceId: created.payment.id },
+    });
+    await prisma.cashLedgerEntry.delete({ where: { id: originalLedger.id } });
     await prisma.cashAccount.delete({ where: { id: "main-cash" } });
 
     await expect(
@@ -285,6 +289,17 @@ describe("Finance transaction integration", () => {
     expect(reversal).toBeNull();
 
     await prisma.cashAccount.create({ data: { id: "main-cash", name: "Integration Cash", currency: "DZD" } });
+    await prisma.cashLedgerEntry.create({
+      data: {
+        cashAccountId: "main-cash",
+        type: originalLedger.type,
+        amount: originalLedger.amount,
+        direction: originalLedger.direction,
+        referenceType: originalLedger.referenceType,
+        referenceId: originalLedger.referenceId,
+        reason: originalLedger.reason,
+      },
+    });
   });
 
   it("serializes concurrent reversal attempts for the same shipment payment", async () => {
