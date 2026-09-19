@@ -1,5 +1,6 @@
 import { randomInt } from "node:crypto";
 import { prisma } from "@/infrastructure/db/prisma";
+import type { Prisma } from "@/generated/prisma/client";
 import { can, permissionActions } from "@/domain/auth/permission-engine";
 import {
   debtStatusFor,
@@ -21,7 +22,7 @@ type PaymentInput = {
   reason?: string;
 };
 
-async function uniquePaymentReference(tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0]) {
+async function uniquePaymentReference(tx: Prisma.TransactionClient) {
   for (let i = 0; i < 10; i += 1) {
     const reference = `PAY-${Date.now()}-${randomInt(1000, 10000)}`;
     const exists = await tx.payment.findUnique({ where: { reference }, select: { id: true } });
