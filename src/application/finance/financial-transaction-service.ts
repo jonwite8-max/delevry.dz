@@ -1,19 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@/generated/prisma/client";
 import { recordAudit } from "@/application/audit/audit-service";
-import {
-  paymentMethods,
-  paymentStatuses,
-  paymentTypes,
-  ledgerDirections,
-  financialStatusFor,
-  debtStatusFor,
-  debtStatuses,
-  validateCollectionAgainstDue,
-  moneyFromDatabase,
-  moneyToNumber,
-  moneyToString,
-} from "@/domain/finance/financial-engine";
+import { paymentMethods, paymentStatuses, paymentTypes, ledgerDirections, financialStatusFor, debtStatusFor, debtStatuses, validateCollectionAgainstDue, moneyFromDatabase, moneyToNumber, moneyToString } from "@/domain/finance/financial-engine";
 
 type Tx = Prisma.TransactionClient;
 
@@ -79,13 +67,11 @@ export async function syncShipmentFinancialState(tx: Tx, shipmentId: string) {
       },
     });
   } else {
-    const settledMinor = collectedMinor < dueMinor ? collectedMinor : dueMinor;
-    const settledStatus = debtStatusFor(shipment.deliveryFee.toString(), moneyToString(settledMinor));
     await tx.debt.updateMany({
       where: { shipmentId: shipment.id },
       data: {
-        settledAmount: moneyToString(settledMinor),
-        status: settledStatus,
+        settledAmount: moneyToString(collectedMinor < dueMinor ? collectedMinor : dueMinor),
+        status: debtStatusFor(shipment.deliveryFee.toString(), collectedMinor < dueMinor ? aggregate._sum.amount?.toString() ?? "0" : shipment.deliveryFee.toString()),
       },
     });
     debtAfter = await tx.debt.findUnique({ where: { shipmentId } });
@@ -124,13 +110,8 @@ export async function createCollectionPayment(tx: Tx, input: CollectionPaymentIn
       },
       _sum: { amount: true },
     });
-    validateCollectionAgainstDue(
-      shipmentDue.deliveryFee.toString(),
-      aggregate._sum.amount?.toString() ?? "0",
-      moneyToString(amountMinor),
-    );
+    validateCollectionAgainstDue(shipmentDue.deliveryFee.toString(), aggregate._sum.amount?.toString() ?? "0", moneyToString(amountMinor));
   }
-
   const payment = await tx.payment.create({
     data: {
       reference: `PAY-${randomUUID()}`,
@@ -162,7 +143,9 @@ export async function createCollectionPayment(tx: Tx, input: CollectionPaymentIn
     },
   });
 
-  const financial = shipment ? await syncShipmentFinancialState(tx, shipment.id) : null;
+  const financial = shipment
+    ? await syncShipmentFinancialState(tx, shipment.id)
+    : null;
 
   return { payment, financial };
 }
