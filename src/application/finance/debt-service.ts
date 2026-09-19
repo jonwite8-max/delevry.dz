@@ -1,6 +1,6 @@
 import { prisma } from "@/infrastructure/db/prisma";
 import { can, permissionActions } from "@/domain/auth/permission-engine";
-import { paymentMethods, debtStatusFor, remainingDebt } from "@/domain/finance/financial-engine";
+import { paymentMethods, remainingDebt } from "@/domain/finance/financial-engine";
 import { recordAudit } from "@/application/audit/audit-service";
 import { createCollectionPayment } from "@/application/finance/financial-transaction-service";
 
