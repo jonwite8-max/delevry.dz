@@ -19,7 +19,7 @@ export type PermissionAction = (typeof permissionActions)[keyof typeof permissio
 const permissions: Record<string, readonly PermissionAction[]> = {
   SUPER_ADMIN: Object.values(permissionActions),
   ADMIN: [
-    permissionActions.shipmentCreate, permissionActions.shipmentRead, permissionActions.customerCreate, permissionActions.customerRead,
+    permissionActions.shipmentCreate, permissionActions.shipmentRead,
     permissionActions.shipmentUpdateStatus, permissionActions.shipmentCancel,
     permissionActions.customerCreate, permissionActions.customerRead,
     permissionActions.financeRead, permissionActions.financePaymentCreate,
