@@ -1,0 +1,1 @@
+import{describe,it,expect}from"vitest";import{canTransition}from"@/domain/shipment/shipment-engine";describe("ShipmentTransitionEngine",()=>{it("allows processing to transit",()=>expect(canTransition("PROCESSING","IN_TRANSIT")).toBe(true));it("blocks delivered to processing",()=>expect(canTransition("DELIVERED","PROCESSING")).toBe(false))})
