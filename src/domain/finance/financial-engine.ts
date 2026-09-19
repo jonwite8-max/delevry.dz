@@ -42,3 +42,10 @@ export function debtStatusFor(original: number, settled: number) {
 export function remainingDebt(original: number, settled: number) {
   return Math.max(0, original - settled);
 }
+
+export function validateCollectionAgainstDue(totalDue: number, collected: number, amount: number) {
+  if (!Number.isFinite(totalDue) || totalDue < 0) throw new Error("INVALID_TOTAL_DUE");
+  if (!Number.isFinite(collected) || collected < 0) throw new Error("INVALID_COLLECTED");
+  if (!Number.isFinite(amount) || amount <= 0) throw new Error("INVALID_AMOUNT");
+  if (collected + amount > totalDue) throw new Error("AMOUNT_EXCEEDS_DUE");
+}
