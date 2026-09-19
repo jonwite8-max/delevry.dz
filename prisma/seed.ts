@@ -1,10 +1,14 @@
+import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client";
 import bcrypt from "bcryptjs";
 
-const prisma = new PrismaClient();
+const adapter = new PrismaPg({
+  connectionString: String(process.env["DATABASE_URL"]),
+});
+const prisma = new PrismaClient({ adapter });
 
 async function main() {
-  const password = process.env.DEMO_ADMIN_PASSWORD ?? "ChangeMe-123!";
+  const password = process.env["DEMO_ADMIN_PASSWORD"] ?? "ChangeMe-123!";
   const hash = await bcrypt.hash(password, 12);
 
   await prisma.user.upsert({
@@ -21,7 +25,11 @@ async function main() {
   await prisma.cashAccount.upsert({
     where: { id: "main-cash" },
     update: {},
-    create: { id: "main-cash", name: "الخزينة الرئيسية", currency: "DZD" },
+    create: {
+      id: "main-cash",
+      name: "الخزينة الرئيسية",
+      currency: "DZD",
+    },
   });
 
   console.log("Seed complete: admin@delevry.dz");
