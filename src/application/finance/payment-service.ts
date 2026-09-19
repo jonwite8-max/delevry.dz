@@ -63,8 +63,15 @@ export async function reversePayment(role: string, userId: string, paymentId: st
   if (reason.trim().length < 3) throw new Error("REASON_REQUIRED");
 
   return prisma.$transaction(async (tx) => {
-    const payment = await tx.payment.findUnique({ where: { id: paymentId } });
+    let payment = await tx.payment.findUnique({ where: { id: paymentId } });
     if (!payment) throw new Error("PAYMENT_NOT_FOUND");
+
+    if (payment.shipmentId) {
+      await tx.$queryRaw<{ id: string }[]>`SELECT id FROM "Shipment" WHERE id = ${payment.shipmentId} FOR UPDATE`;
+      payment = await tx.payment.findUnique({ where: { id: paymentId } });
+      if (!payment) throw new Error("PAYMENT_NOT_FOUND");
+    }
+
     if (payment.status !== paymentStatuses.VALID) throw new Error("PAYMENT_ALREADY_REVERSED");
 
     const updated = await tx.payment.update({
