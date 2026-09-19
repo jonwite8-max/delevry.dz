@@ -259,6 +259,122 @@ describe("Finance transaction integration", () => {
     expect(payment.status).toBe("REVERSED");
   });
 
+  it("rolls back the entire reversal when the cash account is missing", async () => {
+    const { user, shipment } = await fixture();
+    const created = await prisma.$transaction((tx) => createCollectionPayment(tx, {
+      shipmentId: shipment.id,
+      amount: 300,
+      method: "CASH",
+      createdByUserId: user.id,
+    }));
+
+    await prisma.cashAccount.delete({ where: { id: "main-cash" } });
+
+    await expect(
+      reversePayment("SUPER_ADMIN", user.id, created.payment.id, "rollback integration test"),
+    ).rejects.toThrow("MAIN_CASH_NOT_FOUND");
+
+    const payment = await prisma.payment.findUniqueOrThrow({ where: { id: created.payment.id } });
+    const current = await prisma.shipment.findUniqueOrThrow({ where: { id: shipment.id } });
+    const reversal = await prisma.cashLedgerEntry.findFirst({
+      where: { referenceType: "Payment", referenceId: payment.id, type: "PAYMENT_REVERSAL" },
+    });
+
+    expect(payment.status).toBe("VALID");
+    expect(current.financialStatus).toBe("PARTIALLY_PAID");
+    expect(reversal).toBeNull();
+
+    await prisma.cashAccount.create({ data: { id: "main-cash", name: "Integration Cash", currency: "DZD" } });
+  });
+
+  it("serializes concurrent reversal attempts for the same shipment payment", async () => {
+    const { user, shipment } = await fixture();
+    const created = await prisma.$transaction((tx) => createCollectionPayment(tx, {
+      shipmentId: shipment.id,
+      amount: 300,
+      method: "CASH",
+      createdByUserId: user.id,
+    }));
+
+    const results = await Promise.allSettled([
+      reversePayment("SUPER_ADMIN", user.id, created.payment.id, "concurrent reversal A"),
+      reversePayment("SUPER_ADMIN", user.id, created.payment.id, "concurrent reversal B"),
+    ]);
+
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
+    const rejected = results.find((result) => result.status === "rejected");
+    expect(rejected?.reason).toHaveProperty("message", "PAYMENT_ALREADY_REVERSED");
+
+    const payment = await prisma.payment.findUniqueOrThrow({ where: { id: created.payment.id } });
+    const reversals = await prisma.cashLedgerEntry.findMany({
+      where: { referenceType: "Payment", referenceId: payment.id, type: "PAYMENT_REVERSAL" },
+    });
+    const audits = await prisma.auditLog.findMany({
+      where: { entityType: "Payment", entityId: payment.id, action: "REVERSE" },
+    });
+
+    expect(payment.status).toBe("REVERSED");
+    expect(reversals).toHaveLength(1);
+    expect(audits).toHaveLength(1);
+  });
+
+  it("returns a partially paid shipment and cancels its debt", async () => {
+    const { user, customer, shipment } = await fixture();
+    await prisma.$transaction((tx) => createCollectionPayment(tx, {
+      shipmentId: shipment.id,
+      customerId: customer.id,
+      amount: 300,
+      method: "CASH",
+      createdByUserId: user.id,
+    }));
+
+    const { transitionShipment } = await import("@/application/shipments/shipment-service");
+    await transitionShipment("ADMIN", user.id, shipment.reference, "PROCESSING", "prepare return");
+    await transitionShipment("ADMIN", user.id, shipment.reference, "RECEIVED", "prepare return");
+    await transitionShipment("ADMIN", user.id, shipment.reference, "IN_TRANSIT", "prepare return");
+    const returned = await transitionShipment("ADMIN", user.id, shipment.reference, "RETURNED", "customer return");
+
+    expect(returned.status).toBe("RETURNED");
+    const payment = await prisma.payment.findFirstOrThrow({ where: { shipmentId: shipment.id } });
+    const debt = await prisma.debt.findUniqueOrThrow({ where: { shipmentId: shipment.id } });
+    const current = await prisma.shipment.findUniqueOrThrow({ where: { id: shipment.id } });
+    const reversal = await prisma.cashLedgerEntry.findFirst({
+      where: { referenceType: "Payment", referenceId: payment.id, type: "PAYMENT_REVERSAL", direction: "OUT" },
+    });
+
+    expect(payment.status).toBe("REVERSED");
+    expect(debt.status).toBe("CANCELLED");
+    expect(current.financialStatus).toBe("REFUNDED");
+    expect(reversal?.amount.toString()).toBe("300");
+  });
+
+  it("returns a fully paid shipment and reverses its collection", async () => {
+    const { user, shipment } = await fixture();
+    const created = await prisma.$transaction((tx) => createCollectionPayment(tx, {
+      shipmentId: shipment.id,
+      amount: 1000,
+      method: "CASH",
+      createdByUserId: user.id,
+    }));
+
+    const { transitionShipment } = await import("@/application/shipments/shipment-service");
+    await transitionShipment("SUPER_ADMIN", user.id, shipment.reference, "PROCESSING", "prepare full return");
+    await transitionShipment("SUPER_ADMIN", user.id, shipment.reference, "RECEIVED", "prepare full return");
+    await transitionShipment("SUPER_ADMIN", user.id, shipment.reference, "IN_TRANSIT", "prepare full return");
+    await transitionShipment("SUPER_ADMIN", user.id, shipment.reference, "RETURNED", "full return");
+
+    const payment = await prisma.payment.findUniqueOrThrow({ where: { id: created.payment.id } });
+    const current = await prisma.shipment.findUniqueOrThrow({ where: { id: shipment.id } });
+    const reversal = await prisma.cashLedgerEntry.findFirst({
+      where: { referenceType: "Payment", referenceId: payment.id, type: "PAYMENT_REVERSAL", direction: "OUT" },
+    });
+
+    expect(payment.status).toBe("REVERSED");
+    expect(current.financialStatus).toBe("REFUNDED");
+    expect(reversal?.amount.toString()).toBe("1000");
+  });
+
   it("reverses a partial payment and restores the debt", async () => {
     const { user, customer, shipment } = await fixture();
     const created = await prisma.$transaction((tx) => createCollectionPayment(tx, {
