@@ -1,0 +1,1 @@
+export default function Partners(){return <section className="p-6 md:p-8"><h1 className="text-3xl font-bold">الشركاء</h1><p className="mt-2 text-slate-500">النسب، الربح القابل للتوزيع، الحصص والتسويات.</p></section>}
