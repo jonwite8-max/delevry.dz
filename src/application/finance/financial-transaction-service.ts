@@ -145,3 +145,50 @@ export async function createCollectionPayment(tx: Tx, input: CollectionPaymentIn
 
   return { payment, financial };
 }
+
+export async function reverseShipmentFinancials(tx: Tx, shipmentId: string, reason: string) {
+  if (reason.trim().length < 3) throw new Error("REASON_REQUIRED");
+
+  await tx.$queryRaw<{ id: string }[]>`SELECT id FROM "Shipment" WHERE id = ${shipmentId} FOR UPDATE`;
+  const shipment = await tx.shipment.findUnique({
+    where: { id: shipmentId },
+    select: { id: true, financialStatus: true },
+  });
+  if (!shipment) throw new Error("SHIPMENT_NOT_FOUND");
+
+  const payments = await tx.payment.findMany({
+    where: { shipmentId, status: paymentStatuses.VALID, type: paymentTypes.COLLECTION },
+  });
+
+  if (payments.length === 0) {
+    return { shipmentId, reversedPaymentIds: [] as string[], refundedAmount: 0 };
+  }
+
+  const cash = await tx.cashAccount.findUnique({ where: { id: "main-cash" }, select: { id: true } });
+  if (!cash) throw new Error("MAIN_CASH_NOT_FOUND");
+
+  for (const payment of payments) {
+    await tx.payment.update({ where: { id: payment.id }, data: { status: paymentStatuses.REVERSED } });
+    await tx.cashLedgerEntry.create({
+      data: {
+        cashAccountId: cash.id,
+        type: "PAYMENT_REVERSAL",
+        amount: payment.amount,
+        direction: ledgerDirections.OUT,
+        referenceType: "Payment",
+        referenceId: payment.id,
+        reason: reason.trim(),
+      },
+    });
+  }
+
+  const financial = await syncShipmentFinancialState(tx, shipmentId);
+  await tx.shipment.update({ where: { id: shipmentId }, data: { financialStatus: "REFUNDED" } });
+
+  return {
+    shipmentId,
+    reversedPaymentIds: payments.map((payment) => payment.id),
+    refundedAmount: payments.reduce((sum, payment) => sum + Number(payment.amount), 0),
+    financial,
+  };
+}
