@@ -1,2 +1,31 @@
-import{NextResponse}from"next/server";import bcrypt from"bcryptjs";import{prisma}from"@/infrastructure/db/prisma";import{createSession,setSession}from"@/shared/auth/session";
-export async function POST(req:Request){const{identifier,password}=await req.json();if(typeof identifier!=="string"||typeof password!=="string")return NextResponse.json({error:"بيانات الدخول مطلوبة"},{status:400});const user=await prisma.user.findUnique({where:{email:identifier}});if(!user||user.status!=="ACTIVE"||!(await bcrypt.compare(password,user.passwordHash)))return NextResponse.json({error:"بيانات الدخول غير صحيحة"},{status:401});await setSession(await createSession(user.id,user.role));await prisma.user.update({where:{id:user.id},data:{lastLoginAt:new Date()}});return NextResponse.json({ok:true})}
+import { NextResponse } from "next/server";
+import { authenticate } from "@/application/auth/login-service";
+import { setSession } from "@/shared/auth/session";
+
+export async function POST(req: Request) {
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "صيغة البيانات غير صحيحة" }, { status: 400 });
+  }
+
+  if (
+    typeof body !== "object" ||
+    body === null ||
+    !("identifier" in body) ||
+    !("password" in body) ||
+    typeof body.identifier !== "string" ||
+    typeof body.password !== "string"
+  ) {
+    return NextResponse.json({ error: "بيانات الدخول مطلوبة" }, { status: 400 });
+  }
+
+  const token = await authenticate(body.identifier, body.password);
+  if (!token) {
+    return NextResponse.json({ error: "بيانات الدخول غير صحيحة" }, { status: 401 });
+  }
+
+  await setSession(token);
+  return NextResponse.json({ ok: true });
+}
