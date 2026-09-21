@@ -4,7 +4,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mysql"
 }
 
 enum UserStatus {
@@ -73,7 +73,6 @@ enum AuditAction {
   MERGE
   ARCHIVE
 }
-
 
 model User {
   id String @id @default(cuid())
