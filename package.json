@@ -16,11 +16,11 @@
     "start:standalone": "node .next/standalone/server.js"
   },
   "dependencies": {
-    "@prisma/adapter-pg": "7.10.0",
+    "@prisma/adapter-mariadb": "7.10.0",
     "bcryptjs": "3.0.3",
     "jose": "6.2.12",
     "next": "16.3.5",
-    "pg": "8.16.3",
+    "mariadb": "3.4.5",
     "qrcode": "1.5.4",
     "react": "19.3.0",
     "react-dom": "19.3.0",
@@ -37,8 +37,8 @@
     "@vitejs/plugin-react": "5.0.4",
     "eslint": "9.35.0",
     "eslint-config-next": "16.3.5",
-    "prisma": "7.10.0",
     "tailwindcss": "4.1.13",
+    "prisma": "7.10.0",
     "tsx": "4.20.5",
     "typescript": "5.9.2",
     "vitest": "3.2.4"
