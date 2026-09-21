@@ -7,14 +7,72 @@ datasource db {
   provider = "postgresql"
 }
 
-enum UserStatus { ACTIVE INACTIVE SUSPENDED }
-enum UserRole { SUPER_ADMIN ADMIN STAFF USER }
-enum ShipmentStatus { NEW PROCESSING RECEIVED IN_TRANSIT ARRIVED READY_FOR_PICKUP DELIVERED CANCELLED RETURNED ISSUE }
-enum FinancialStatus { UNPAID PARTIALLY_PAID PAID REFUNDED REVERSED SETTLED }
-enum CustomerType { TEMPORARY REGISTERED }
-enum CustomerLifecycle { NEW ACTIVE REPEAT INACTIVE }
-enum MerchantVerificationStatus { UNVERIFIED PENDING VERIFIED REJECTED }
-enum AuditAction { CREATE UPDATE CANCEL REVERSE LOGIN LOGOUT PERMISSION_CHANGE VERIFY MERGE ARCHIVE }
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  STAFF
+  USER
+}
+
+enum ShipmentStatus {
+  NEW
+  PROCESSING
+  RECEIVED
+  IN_TRANSIT
+  ARRIVED
+  READY_FOR_PICKUP
+  DELIVERED
+  CANCELLED
+  RETURNED
+  ISSUE
+}
+
+enum FinancialStatus {
+  UNPAID
+  PARTIALLY_PAID
+  PAID
+  REFUNDED
+  REVERSED
+  SETTLED
+}
+
+enum CustomerType {
+  TEMPORARY
+  REGISTERED
+}
+
+enum CustomerLifecycle {
+  NEW
+  ACTIVE
+  REPEAT
+  INACTIVE
+}
+
+enum MerchantVerificationStatus {
+  UNVERIFIED
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  CANCEL
+  REVERSE
+  LOGIN
+  LOGOUT
+  PERMISSION_CHANGE
+  VERIFY
+  MERGE
+  ARCHIVE
+}
 
 model User {
   id String @id @default(cuid())
@@ -30,6 +88,7 @@ model User {
   payments Payment[]
   auditLogs AuditLog[]
 }
+
 model Customer {
   id String @id @default(cuid())
   name String
@@ -51,6 +110,7 @@ model Customer {
   @@index([phone])
   @@index([businessName])
 }
+
 model Merchant {
   id String @id @default(cuid())
   name String
@@ -69,6 +129,7 @@ model Merchant {
   @@index([phone])
   @@index([niche,wilaya,commune])
 }
+
 model Shipment {
   id String @id @default(cuid())
   reference String @unique
@@ -100,6 +161,7 @@ model Shipment {
   @@index([status,createdAt])
   @@index([destinationWilaya,status])
 }
+
 model ShipmentStatusHistory {
   id String @id @default(cuid())
   shipmentId String
@@ -111,6 +173,7 @@ model ShipmentStatusHistory {
   shipment Shipment @relation(fields:[shipmentId],references:[id],onDelete:Cascade)
   @@index([shipmentId,createdAt])
 }
+
 model Payment {
   id String @id @default(cuid())
   reference String @unique
@@ -126,6 +189,7 @@ model Payment {
   customer Customer? @relation(fields:[customerId],references:[id])
   createdBy User @relation(fields:[createdByUserId],references:[id])
 }
+
 model Debt {
   id String @id @default(cuid())
   customerId String
@@ -139,6 +203,7 @@ model Debt {
   shipment Shipment? @relation(fields:[shipmentId],references:[id])
   @@index([customerId,status])
 }
+
 model CashAccount {
   id String @id @default(cuid())
   name String
@@ -146,6 +211,7 @@ model CashAccount {
   createdAt DateTime @default(now())
   entries CashLedgerEntry[]
 }
+
 model CashLedgerEntry {
   id String @id @default(cuid())
   cashAccountId String
@@ -159,6 +225,7 @@ model CashLedgerEntry {
   cashAccount CashAccount @relation(fields:[cashAccountId],references:[id])
   @@index([cashAccountId,createdAt])
 }
+
 model Expense {
   id String @id @default(cuid())
   reference String @unique
@@ -170,6 +237,7 @@ model Expense {
   createdByUserId String
   createdAt DateTime @default(now())
 }
+
 model Partner {
   id String @id @default(cuid())
   name String
@@ -179,6 +247,7 @@ model Partner {
   createdAt DateTime @default(now())
   settlements PartnerSettlement[]
 }
+
 model PartnerSettlement {
   id String @id @default(cuid())
   partnerId String
@@ -191,6 +260,7 @@ model PartnerSettlement {
   remainingAmount Decimal @default(0) @db.Decimal(12,2)
   partner Partner @relation(fields:[partnerId],references:[id])
 }
+
 model AuditLog {
   id String @id @default(cuid())
   actorUserId String?
