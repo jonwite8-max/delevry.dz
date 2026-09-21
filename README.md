@@ -1,21 +1,26 @@
 # Delevry DZ — منصة التوصيل
 
-نسخة Foundation أولى للمنصة: لوحة تحكم RTL، طرود، عملاء، تجار، تتبع عام، QR، مالية، مصاريف، شركاء وتقارير.
+نسخة Production Foundation لمنصة إدارة عمليات التوصيل، تعمل مع PostgreSQL وPrisma 7.
 
-## التشغيل
-1. Node.js 24.
-2. انسخ \`.env.example\` إلى \`.env\`.
-3. ضع \`DATABASE_URL\` و\`APP_URL\` و\`AUTH_SECRET\`.
-4. \`npm install\`
-5. \`npm run db:generate\`
-6. \`npm run db:migrate -- --name foundation_v1\`
-7. \`npm run db:seed\`
-8. \`npm run dev\`
+## التشغيل الإنتاجي
+- Node.js 24
+- PostgreSQL
+- لا يوجد اعتماد على GitHub أثناء التشغيل.
+- ملف البيئة الإنتاجي يُقرأ من `/var/www/delevry-dz/shared/.env` بواسطة `deployment/start.sh`.
+- تشغيل الإنتاج يستخدم `.next/standalone/server.js`.
 
-الدخول الأول: \`admin@delevry.dz\` وكلمة المرور المحددة في \`DEMO_ADMIN_PASSWORD\`.
+المتغيرات المطلوبة: `DATABASE_URL` و`AUTH_SECRET` (32 حرفًا على الأقل) و`APP_URL`.
 
-## QR والتتبع
-كل طرد يملك مرجعاً ورقماً تسلسلياً. الـQR يقود إلى \`/tracking?ref=<reference>\` ولا يحمل بيانات شخصية.
+## التطوير
+`npm install`
+`npm run db:generate`
+`npm run typecheck`
+`npm run lint`
+`npm test`
+`npm run build`
 
-## ملاحظة هندسية
-هذه Foundation فعلية قابلة للبناء، لكن لا نعتبر العمليات التجارية والمالية Production Ready قبل تشغيل الاختبارات، ربط كل الكتابات بالمحركات المركزية، وتطبيق الصلاحيات والتدقيق والمعاملات المالية الكاملة.
+## الحساب الأول
+يتم إنشاء الحساب الإداري فقط عند تشغيل seed مع تعيين `DEMO_ADMIN_PASSWORD` صراحةً. لا توجد كلمة مرور افتراضية داخل الكود.
+
+## المعمارية
+منطق الشحنات والحسابات التشغيلية يجب أن يبقى داخل طبقات Domain/Application، والواجهات تجمع المدخلات وتعرض النتائج فقط. قاعدة البيانات الحالية المستهدفة PostgreSQL.
