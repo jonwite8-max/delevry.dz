@@ -41,11 +41,38 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
-      - name: Package source artifact
-        run: git archive --format=zip --output="delevry-dz-foundation-${GITHUB_SHA}.zip" HEAD
+      - name: Verify standalone output
+        run: |
+          test -f .next/standalone/server.js
+          test -d .next/static
+          test -d public
+
+      - name: Assemble production artifact
+        run: |
+          rm -rf release
+          mkdir -p release/.next release/deployment
+          cp -a .next/standalone/. release/
+          cp -a .next/static release/.next/static
+          cp -a public release/public
+          cp deployment/start.sh release/deployment/start.sh
+          cp package.json release/package.json
+          printf "%s\n" "DELEVRY.DZ production artifact" "commit: $GITHUB_SHA" "runtime: .next/standalone/server.js" "env: /var/www/delevry-dz/shared/.env" "port: 3000" > release/RELEASE_MANIFEST.txt
+
+      - name: Verify production artifact
+        run: |
+          test -f release/server.js
+          test -f release/.next/static/BUILD_ID
+          test -f release/deployment/start.sh
+          ! find release -type f \( -name ".env" -o -name ".env.local" \) | grep -q .
+
+      - name: Package production artifact
+        run: |
+          cd release
+          zip -qr "../delevry-dz-production-$GITHUB_SHA.zip" .
+
       - uses: actions/upload-artifact@v4
         with:
-          name: delevry-dz-foundation-${{ github.sha }}
-          path: delevry-dz-foundation-${{ github.sha }}.zip
+          name: delevry-dz-production-${{ github.sha }}
+          path: delevry-dz-production-$GITHUB_SHA.zip
           if-no-files-found: error
           retention-days: 14
