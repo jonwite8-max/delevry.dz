@@ -61,7 +61,7 @@ jobs:
           test -d release/.next/static
           test -f release/deployment/start.sh
           test -x release/deployment/start.sh
-          ! find release -type f \\( -name ".env" -o -name ".env.local" \\) | grep -q .
+          ! find release -type f \( -name ".env" -o -name ".env.local" \) | grep -q .
       - name: Package production artifact
         run: |
           cd release
