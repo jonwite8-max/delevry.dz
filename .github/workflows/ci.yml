@@ -1,52 +1,46 @@
 name: CI
 on:
   push:
-    branches: [main, "feature/**"]
+    branches: [main, "feature/**", "production-rebuild-*"]
   pull_request:
     branches: [main]
-
 jobs:
   checks:
     runs-on: ubuntu-latest
     services:
-      mysql:
-        image: mysql:8.4
+      postgres:
+        image: postgres:16
         env:
-          MYSQL_ROOT_PASSWORD: root
-          MYSQL_DATABASE: delevry_ci
-        ports:
-          - 3306:3306
+          POSTGRES_PASSWORD: root
+          POSTGRES_DB: delevry_ci
+          POSTGRES_USER: postgres
+        ports: ["5432:5432"]
         options: >-
-          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=20
+          --health-cmd="pg_isready -U postgres -d delevry_ci"
+          --health-interval=10s --health-timeout=5s --health-retries=20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with:
-          node-version: 24
+        with: {node-version: 24, cache: npm}
       - run: npm install
       - name: Set CI environment
         run: |
-          echo "DATABASE_URL=mysql://root:root@127.0.0.1:3306/delevry_ci" >> "$GITHUB_ENV"
+          echo "DATABASE_URL=postgresql://postgres:root@127.0.0.1:5432/delevry_ci?schema=public" >> "$GITHUB_ENV"
           echo "AUTH_SECRET=ci-only-secret-with-at-least-32-characters" >> "$GITHUB_ENV"
           echo "DEMO_ADMIN_PASSWORD=CI-Only-Password-123!" >> "$GITHUB_ENV"
           echo "APP_URL=http://127.0.0.1:3000" >> "$GITHUB_ENV"
       - run: npm run db:generate
-      - run: npx prisma migrate deploy
+      - run: npx prisma db push
       - run: npm run db:seed
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test
       - run: npm run build
-
       - name: Verify standalone output
         run: |
           test -f .next/standalone/server.js
           test -d .next/static
           test -d public
-
       - name: Assemble production artifact
         run: |
           rm -rf release
@@ -57,8 +51,7 @@ jobs:
           cp deployment/start.sh release/deployment/start.sh
           cp package.json release/package.json
           chmod +x release/deployment/start.sh
-          printf "%s\n" "DELEVRY.DZ production artifact" "commit: $GITHUB_SHA" "runtime: .next/standalone/server.js" "env: /var/www/delevry-dz/shared/.env" "database: MySQL 127.0.0.1:3306/DELVRYDZ" "port: 3000" > release/RELEASE_MANIFEST.txt
-
+          printf "%s\\n" "DELEVRY.DZ production artifact" "commit: \$GITHUB_SHA" "runtime: .next/standalone/server.js" "env: /var/www/delevry-dz/shared/.env" "database: PostgreSQL" "port: 3000" > release/RELEASE_MANIFEST.txt
       - name: Verify production artifact
         run: |
           test -f release/server.js
@@ -66,13 +59,11 @@ jobs:
           test -d release/.next/static
           test -f release/deployment/start.sh
           test -x release/deployment/start.sh
-          ! find release -type f \( -name ".env" -o -name ".env.local" \) | grep -q .
-
+          ! find release -type f \\( -name ".env" -o -name ".env.local" \\) | grep -q .
       - name: Package production artifact
         run: |
           cd release
-          zip -qr "../delevry-dz-production-$GITHUB_SHA.zip" .
-
+          zip -qr "../delevry-dz-production-\$GITHUB_SHA.zip" .
       - uses: actions/upload-artifact@v4
         with:
           name: delevry-dz-production-${{ github.sha }}
