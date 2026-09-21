@@ -47,6 +47,7 @@ jobs:
           rm -rf release
           mkdir -p release/.next release/deployment
           cp -a .next/standalone/. release/
+          cp .next/BUILD_ID release/.next/BUILD_ID
           cp -a .next/static release/.next/static
           cp -a public release/public
           cp deployment/start.sh release/deployment/start.sh
