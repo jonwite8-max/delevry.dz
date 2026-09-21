@@ -9,19 +9,18 @@ jobs:
   checks:
     runs-on: ubuntu-latest
     services:
-      postgres:
-        image: postgres:17
+      mysql:
+        image: mysql:8.4
         env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: delevry_ci
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: delevry_ci
         ports:
-          - 5432:5432
+          - 3306:3306
         options: >-
-          --health-cmd "pg_isready -U postgres -d delevry_ci"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -30,7 +29,7 @@ jobs:
       - run: npm install
       - name: Set CI environment
         run: |
-          echo "DATABASE_URL=postgresql://postgres:postgres@localhost:5432/delevry_ci?schema=public" >> "$GITHUB_ENV"
+          echo "DATABASE_URL=mysql://root:root@127.0.0.1:3306/delevry_ci" >> "$GITHUB_ENV"
           echo "AUTH_SECRET=ci-only-secret-with-at-least-32-characters" >> "$GITHUB_ENV"
           echo "DEMO_ADMIN_PASSWORD=CI-Only-Password-123!" >> "$GITHUB_ENV"
           echo "APP_URL=http://127.0.0.1:3000" >> "$GITHUB_ENV"
@@ -58,7 +57,7 @@ jobs:
           cp deployment/start.sh release/deployment/start.sh
           cp package.json release/package.json
           chmod +x release/deployment/start.sh
-          printf "%s\n" "DELEVRY.DZ production artifact" "commit: $GITHUB_SHA" "runtime: .next/standalone/server.js" "env: /var/www/delevry-dz/shared/.env" "port: 3000" > release/RELEASE_MANIFEST.txt
+          printf "%s\n" "DELEVRY.DZ production artifact" "commit: $GITHUB_SHA" "runtime: .next/standalone/server.js" "env: /var/www/delevry-dz/shared/.env" "database: MySQL 127.0.0.1:3306/DELVRYDZ" "port: 3000" > release/RELEASE_MANIFEST.txt
 
       - name: Verify production artifact
         run: |
