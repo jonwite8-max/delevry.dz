@@ -41,6 +41,7 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
+
       - name: Verify standalone output
         run: |
           test -f .next/standalone/server.js
@@ -56,13 +57,16 @@ jobs:
           cp -a public release/public
           cp deployment/start.sh release/deployment/start.sh
           cp package.json release/package.json
+          chmod +x release/deployment/start.sh
           printf "%s\n" "DELEVRY.DZ production artifact" "commit: $GITHUB_SHA" "runtime: .next/standalone/server.js" "env: /var/www/delevry-dz/shared/.env" "port: 3000" > release/RELEASE_MANIFEST.txt
 
       - name: Verify production artifact
         run: |
           test -f release/server.js
-          test -f release/.next/static/BUILD_ID
+          test -f release/.next/BUILD_ID
+          test -d release/.next/static
           test -f release/deployment/start.sh
+          test -x release/deployment/start.sh
           ! find release -type f \( -name ".env" -o -name ".env.local" \) | grep -q .
 
       - name: Package production artifact
@@ -73,6 +77,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: delevry-dz-production-${{ github.sha }}
-          path: delevry-dz-production-$GITHUB_SHA.zip
+          path: delevry-dz-production-${{ github.sha }}.zip
           if-no-files-found: error
           retention-days: 14
