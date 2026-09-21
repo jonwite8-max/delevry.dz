@@ -2,12 +2,16 @@ import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 import { PrismaClient } from "../src/generated/prisma/client";
 import bcrypt from "bcryptjs";
 
+const databaseUrl = process.env["DATABASE_URL"];
+if (!databaseUrl) throw new Error("DATABASE_URL is not configured");
+
+const url = new URL(databaseUrl);
 const adapter = new PrismaMariaDb({
-  host: process.env["DATABASE_HOST"] ?? "127.0.0.1",
-  port: Number(process.env["DATABASE_PORT"] ?? 3306),
-  user: process.env["DATABASE_USER"] ?? "root",
-  password: process.env["DATABASE_PASSWORD"] ?? "",
-  database: process.env["DATABASE_NAME"] ?? "DELVRYDZ",
+  host: url.hostname,
+  port: Number(url.port || 3306),
+  user: decodeURIComponent(url.username),
+  password: decodeURIComponent(url.password),
+  database: decodeURIComponent(url.pathname.replace(/^\//, "")),
   connectionLimit: 5,
 });
 const prisma = new PrismaClient({ adapter });
