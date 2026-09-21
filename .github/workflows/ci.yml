@@ -41,13 +41,30 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
-      - name: Package source artifact
         if: always()
-        run: git archive --format=zip --output="delevry-dz-foundation-${GITHUB_SHA}.zip" HEAD
+      - name: Package server-ready release
+        if: always()
+        run: |
+          test -f .next/standalone/server.js
+          PKG="delevry_dz_server"
+          rm -rf "$PKG"
+          mkdir -p "$PKG/.next"
+          cp -a .next/standalone/. "$PKG/"
+          cp -a .next/static "$PKG/.next/static"
+          cp -a public "$PKG/public"
+          cp -a prisma "$PKG/prisma"
+          cp -a deployment "$PKG/deployment"
+          cp package.json "$PKG/package.json"
+          if [ -f package-lock.json ]; then cp package-lock.json "$PKG/package-lock.json"; fi
+          printf "%s\n" "0.2.0-preview-server" > "$PKG/VERSION"
+          printf "%s\n" "DELEVRY.DZ SERVER PREVIEW v0.2.0" "" "Upload/extract this package into the release directory." "Keep the real .env outside the archive and link/copy it server-side only." "Production runtime is prebuilt in .next/standalone." "Start: node .next/standalone/server.js" "Default bind: 127.0.0.1:3000 (set HOSTNAME/PORT as needed)." "Database migrations remain an explicit server administration step." > "$PKG/SERVER_RELEASE_README.txt"
+          printf "%s\n" "{" "  \"project\": \"DELEVRY.DZ\"," "  \"version\": \"0.2.0-preview-server\"," "  \"type\": \"SERVER_REPLACE\"," "  \"commit\": \"${GITHUB_SHA}\"," "  \"requires_manual_build\": false," "  \"contains_prebuilt_next_standalone\": true," "  \"preserved_by_omission\": [\".env\", \"database data\", \"node_modules source tree\"]" "}" > "$PKG/release.json"
+          printf "%s\n" "{" "  \"project\": \"DELEVRY.DZ\"," "  \"architecture\": \"Next.js Modular Monolith / Domain-Application Engines\"," "  \"runtime\": \"Node.js 24 + Next.js standalone + PostgreSQL\"," "  \"deployment\": \"Manual ZIP / server replace\"," "  \"business_logic_policy\": \"UI is presentation only; business rules remain centralized in Domain/Application engines\"" "}" > "$PKG/PROJECT_MANIFEST.json"
+          zip -qr "delevry-dz-server-${GITHUB_SHA}.zip" "$PKG"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: delevry-dz-foundation-${{ github.sha }}
-          path: delevry-dz-foundation-${{ github.sha }}.zip
+          name: delevry-dz-server-${{ github.sha }}
+          path: delevry-dz-server-${{ github.sha }}.zip
           if-no-files-found: error
           retention-days: 14
