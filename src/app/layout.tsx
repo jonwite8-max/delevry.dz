@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
 import "./globals.css";
-export const metadata: Metadata={title:"Delevry DZ | منصة التوصيل",description:"منصة إدارة شركة التوصيل وتتبع الطرود"};
-export default function RootLayout({children}:{children:React.ReactNode}){return <html lang="ar" dir="rtl"><body>{children}</body></html>}
+import Link from "next/link";
+export const metadata: Metadata={title:"Delevry DZ | منصة النقل واللوجستيك",description:"منصة تشغيل لوجستية لإدارة الشحنات والتتبع والتحصيل"};
+export default function RootLayout({children}:{children:React.ReactNode}){return <html lang="ar" dir="rtl"><body><div className="app-shell"><aside className="sidebar"><div className="brand"><div className="brand-mark">D</div><div><b>Delevry DZ</b><small>النقل واللوجستيك</small></div></div><div className="side-label">مركز العمليات</div><nav><Link href="/dashboard">◈ <span>نظرة عامة</span></Link><Link href="/dashboard/shipments">▣ <span>الشحنات والتتبع</span></Link><Link href="/dashboard/shipments/new">＋ <span>شحنة جديدة</span></Link></nav><div className="side-footer">نظام تشغيل لوجستي</div></aside><main className="main-content"><header className="topbar"><div><span className="status-dot"></span> النظام متصل</div><div>Delevry DZ</div></header>{children}</main></div></body></html>}
