@@ -1,4 +1,3 @@
-import type { Metadata } from "next";
-import "./globals.css";
-export const metadata: Metadata={title:"Delevry DZ | منصة التوصيل",description:"منصة إدارة شركة التوصيل وتتبع الطرود"};
+import type {Metadata} from "next";import "./globals.css";
+export const metadata:Metadata={title:"DAHEM | منصة النقل والخدمات اللوجستية",description:"منصة DAHEM لإدارة الشحنات والعملاء والمالية والتتبع."};
 export default function RootLayout({children}:{children:React.ReactNode}){return <html lang="ar" dir="rtl"><body>{children}</body></html>}

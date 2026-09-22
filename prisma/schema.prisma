@@ -4,7 +4,7 @@ generator client {
 }
 
 datasource db {
-  provider = "mysql"
+  provider = "postgresql"
 }
 
 enum UserStatus {
@@ -209,6 +209,7 @@ model CashAccount {
   name String
   currency String @default("DZD")
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   entries CashLedgerEntry[]
 }
 

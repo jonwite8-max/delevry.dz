@@ -9,15 +9,16 @@ jobs:
   checks:
     runs-on: ubuntu-latest
     services:
-      mysql:
-        image: mysql:8.4
+      postgres:
+        image: postgres:16
         env:
-          MYSQL_ROOT_PASSWORD: root
-          MYSQL_DATABASE: delevry_ci
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: delevry_ci
         ports:
-          - 3306:3306
+          - 5432:5432
         options: >-
-          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-cmd="pg_isready -h 127.0.0.1 -U postgres -d delevry_ci"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=20
@@ -29,12 +30,12 @@ jobs:
       - run: npm install
       - name: Set CI environment
         run: |
-          echo "DATABASE_URL=mysql://root:root@127.0.0.1:3306/delevry_ci" >> "$GITHUB_ENV"
+          echo "DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/delevry_ci" >> "$GITHUB_ENV"
           echo "AUTH_SECRET=ci-only-secret-with-at-least-32-characters" >> "$GITHUB_ENV"
           echo "DEMO_ADMIN_PASSWORD=CI-Only-Password-123!" >> "$GITHUB_ENV"
           echo "APP_URL=http://127.0.0.1:3000" >> "$GITHUB_ENV"
       - run: npm run db:generate
-      - run: npx prisma migrate deploy
+      - run: npx prisma db push --accept-data-loss
       - run: npm run db:seed
       - run: npm run typecheck
       - run: npm run lint
@@ -57,7 +58,7 @@ jobs:
           cp deployment/start.sh release/deployment/start.sh
           cp package.json release/package.json
           chmod +x release/deployment/start.sh
-          printf "%s\n" "DELEVRY.DZ production artifact" "commit: $GITHUB_SHA" "runtime: .next/standalone/server.js" "env: /var/www/delevry-dz/shared/.env" "database: MySQL 127.0.0.1:3306/DELVRYDZ" "port: 3000" > release/RELEASE_MANIFEST.txt
+          printf "%s\n" "DELEVRY.DZ production artifact" "commit: $GITHUB_SHA" "runtime: .next/standalone/server.js" "env: /etc/delevry-dz/production.env" "database: PostgreSQL 127.0.0.1:5432/delevry_dz" "port: 3000" > release/RELEASE_MANIFEST.txt
 
       - name: Verify production artifact
         run: |
