@@ -19,9 +19,9 @@ export NODE_ENV=production
 export HOSTNAME="${HOSTNAME:-127.0.0.1}"
 export PORT="${PORT:-3000}"
 
-if [[ ! -f "$APP_DIR/.next/standalone/server.js" ]]; then
-  echo "ERROR: .next/standalone/server.js is missing. Build the production artifact first." >&2
+if [[ ! -f "$APP_DIR/server.js" ]]; then
+  echo "ERROR: production server.js is missing. Build the production artifact first." >&2
   exit 1
 fi
 
-exec node "$APP_DIR/.next/standalone/server.js"
+exec node "$APP_DIR/server.js"
