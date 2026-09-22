@@ -1,17 +1,9 @@
 # DELEVRY.DZ production deployment
 
-This repository is the single source of truth for the application.
-
 Production uses Next.js standalone output.
 
-Required runtime:
-- .next/standalone/server.js
-- .next/static/
-- public/
+The server runtime is installed once. It creates a persistent systemd service and a release-marker watcher. Future application ZIP releases do not change PostgreSQL, production environment variables, or Nginx/CloudPanel configuration.
 
-The production environment stays outside the release package at:
-/var/www/delevry-dz/shared/.env
+The official release ZIP places `.release-complete` as its final archive entry. The watcher restarts the application only after that marker is replaced.
 
-`npm run start` executes `deployment/start.sh`.
-
-The web process does not run database migrations automatically.
+The production environment remains outside the release package.
