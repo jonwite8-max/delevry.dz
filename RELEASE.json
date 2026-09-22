@@ -1,0 +1,5 @@
+{
+  "name": "delevry-dz",
+  "version": "1.2.0",
+  "deploymentModel": "persistent-systemd-auto-restart"
+}
